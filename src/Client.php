@@ -131,12 +131,21 @@ class Client
         $this->restApi = new RestApi($this);
 
         // Register REST API routes
-        if (did_action('rest_api_init')) {
-            // Hook already fired, register directly
-            $this->restApi->registerRoutes();
+        $this->scheduleOrRun('rest_api_init', [$this->restApi, 'registerRoutes']);
+
+        // Register assets (admin only for now)
+        $this->scheduleOrRun('admin_enqueue_scripts', [$this, 'registerAssets']);
+    }
+
+    /**
+     * Schedule a callback for a hook, or run immediately if hook already fired
+     */
+    private function scheduleOrRun(string $hook, callable $callback): void
+    {
+        if (did_action($hook)) {
+            call_user_func($callback);
         } else {
-            // Hook not fired yet, schedule registration
-            add_action('rest_api_init', [$this->restApi, 'registerRoutes']);
+            add_action($hook, $callback);
         }
     }
 
@@ -176,29 +185,46 @@ class Client
     }
 
     /**
-     * Enqueue CSS and JS assets (registers if not already registered)
+     * Register CSS and JS assets (called via admin_enqueue_scripts hook)
+     *
+     * This registers assets early so they're available for enqueuing later.
      */
-    public function enqueueAssets(): void
+    public function registerAssets(): void
     {
         if (!$this->assetsUrl) {
             return;
         }
 
-        // wp_enqueue_* will register automatically if not registered
-        wp_enqueue_style(
+        wp_register_style(
             self::HANDLE,
             $this->assetsUrl . '/css/wpfeatureloop.css',
             [],
             self::VERSION
         );
 
-        wp_enqueue_script(
+        wp_register_script(
             self::HANDLE,
             $this->assetsUrl . '/js/wpfeatureloop.js',
             [],
             self::VERSION,
             true
         );
+    }
+
+    /**
+     * Enqueue CSS and JS assets (called when widget renders)
+     *
+     * Assets must be registered first via registerAssets().
+     */
+    public function enqueueAssets(): void
+    {
+        // If not registered yet (edge case), register now
+        if (!wp_style_is(self::HANDLE, 'registered')) {
+            $this->registerAssets();
+        }
+
+        wp_enqueue_style(self::HANDLE);
+        wp_enqueue_script(self::HANDLE);
     }
 
     /**
