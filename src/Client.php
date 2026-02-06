@@ -9,17 +9,20 @@ namespace WPFeatureLoop;
  *
  * Main entry point for the FeatureLoop SDK.
  *
- * Usage:
+ * STEP 1 - In your main plugin file (runs on every request):
  * ```php
  * use WPFeatureLoop\Client;
- * use WPFeatureLoop\Widget;
  *
- * // Initialize client (REST API + assets registered automatically)
- * $client = new Client('pk_live_xxx', 'project_id');
+ * // Initialize client early (registers REST API routes)
+ * Client::init('pk_live_xxx', 'project_id');
+ * ```
  *
- * // Render widget (just this, nothing else!)
- * $widget = new Widget($client, ['locale' => 'en']);
- * echo $widget->render();
+ * STEP 2 - Where you want to render the widget:
+ * ```php
+ * use WPFeatureLoop\Client;
+ *
+ * // Render widget (that's it!)
+ * echo Client::renderWidget(['locale' => 'en']);
  * ```
  */
 class Client
@@ -33,6 +36,11 @@ class Client
      * Script/style handle
      */
     public const HANDLE = 'wpfeatureloop';
+
+    /**
+     * Singleton instance
+     */
+    private static ?Client $instance = null;
 
     /**
      * API client instance
@@ -55,6 +63,51 @@ class Client
     private ?string $assetsUrl;
 
     /**
+     * Initialize the client (singleton pattern)
+     *
+     * Call this in your main plugin file so REST API routes are registered on every request.
+     *
+     * @param string $publicKey Public API key (starts with pk_live_)
+     * @param string $projectId Project ID
+     * @param array<string, mixed> $options Optional configuration
+     * @return Client
+     */
+    public static function init(string $publicKey, string $projectId, array $options = []): Client
+    {
+        if (self::$instance === null) {
+            self::$instance = new self($publicKey, $projectId, $options);
+        }
+
+        return self::$instance;
+    }
+
+    /**
+     * Get the singleton instance
+     *
+     * @return Client|null Returns null if not initialized
+     */
+    public static function getInstance(): ?Client
+    {
+        return self::$instance;
+    }
+
+    /**
+     * Render the widget (convenience static method)
+     *
+     * @param array $config Widget configuration (locale, container_id, etc.)
+     * @return string HTML or empty string if not initialized
+     */
+    public static function renderWidget(array $config = []): string
+    {
+        if (self::$instance === null) {
+            return '<!-- WPFeatureLoop: Client not initialized. Call Client::init() first. -->';
+        }
+
+        $widget = new Widget(self::$instance, $config);
+        return $widget->render();
+    }
+
+    /**
      * Constructor
      *
      * @param string $publicKey Public API key (starts with pk_live_)
@@ -64,7 +117,7 @@ class Client
      *                                      - capability: Required WP capability (default: 'read')
      *                                      - assets_url: URL to SDK assets folder (auto-detected if not provided)
      */
-    public function __construct(string $publicKey, string $projectId, array $options = [])
+    private function __construct(string $publicKey, string $projectId, array $options = [])
     {
         $apiUrl = $options['api_url'] ?? null;
         $this->capability = $options['capability'] ?? 'read';
@@ -77,8 +130,14 @@ class Client
         $this->api = new Api($publicKey, $projectId, $apiUrl);
         $this->restApi = new RestApi($this);
 
-        // Auto-register REST API routes
-        add_action('rest_api_init', [$this->restApi, 'registerRoutes']);
+        // Register REST API routes
+        if (did_action('rest_api_init')) {
+            // Hook already fired, register directly
+            $this->restApi->registerRoutes();
+        } else {
+            // Hook not fired yet, schedule registration
+            add_action('rest_api_init', [$this->restApi, 'registerRoutes']);
+        }
     }
 
     /**
