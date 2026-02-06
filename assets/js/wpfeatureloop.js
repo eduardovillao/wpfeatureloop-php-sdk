@@ -3,6 +3,8 @@
 
     /**
      * WPFeatureLoop Widget Controller
+     *
+     * Uses <template> tags for HTML - no inline strings!
      */
     class WPFeatureLoopWidget {
         constructor(config) {
@@ -15,8 +17,32 @@
             // Translations from PHP
             this.t = config.i18n || {};
 
-            // Icons from PHP
-            this.icons = config.icons || {};
+            // Template cache
+            this.templates = {};
+        }
+
+        /**
+         * Get a template element by ID
+         */
+        getTemplate(id) {
+            if (!this.templates[id]) {
+                const template = document.getElementById(`wfl-template-${id}`);
+                if (!template) {
+                    console.error(`WPFeatureLoop: Template not found: wfl-template-${id}`);
+                    return null;
+                }
+                this.templates[id] = template;
+            }
+            return this.templates[id];
+        }
+
+        /**
+         * Clone a template and return the element
+         */
+        cloneTemplate(id) {
+            const template = this.getTemplate(id);
+            if (!template) return null;
+            return template.content.cloneNode(true).firstElementChild;
         }
 
         /**
@@ -76,45 +102,59 @@
          * Main render method
          */
         render() {
-            const featuresHtml =
-                this.features.length > 0
-                    ? this.features.map((f) => this.renderCard(f)).join("")
-                    : this.renderEmpty();
+            // Clone header template
+            const headerTemplate = this.getTemplate("header");
+            const header = headerTemplate.content.cloneNode(true);
 
-            const canCreate = this.config.can_interact;
-            const addButton = canCreate
-                ? `
-          <button class="wfl-btn wfl-btn-primary wfl-ripple" id="wfl-add-feature">
-            ${this.icons.plus || ""}
-            ${this.t.suggestFeature || "Suggest Feature"}
-          </button>
-        `
-                : "";
+            // Show add button if can interact
+            const addBtn = header.querySelector(".wfl-add-feature-btn");
+            if (addBtn && this.config.can_interact) {
+                addBtn.style.display = "";
+                addBtn.removeAttribute("disabled");
+            }
 
-            this.container.innerHTML = `
-        <div class="wfl-header">
-          <div class="wfl-header-content">
-            <h1 class="wfl-title">${this.t.title || "What's Next?"}</h1>
-            <p class="wfl-subtitle">${this.t.subtitle || "Help us build what matters to you"}</p>
-          </div>
-          ${addButton}
-        </div>
-        <div class="wfl-list" id="wfl-list">
-          ${featuresHtml}
-        </div>
-        ${this.renderModal()}
-        ${this.renderCommentModal()}
-        <div class="wfl-toast" id="wfl-toast"></div>
-      `;
+            // Create list container
+            const list = document.createElement("div");
+            list.className = "wfl-list";
+            list.id = "wfl-list";
+
+            // Add features or empty state
+            if (this.features.length > 0) {
+                this.features.forEach((f) => {
+                    const card = this.createCard(f);
+                    if (card) list.appendChild(card);
+                });
+            } else {
+                const empty = this.cloneTemplate("empty");
+                if (empty) list.appendChild(empty);
+            }
+
+            // Get modal templates from DOM (already rendered by PHP)
+            const featureModal = document.getElementById("wfl-modal");
+            const commentModal = document.getElementById("wfl-comment-modal");
+            const toast = document.getElementById("wfl-toast");
+
+            // Clear container and rebuild
+            this.container.innerHTML = "";
+            this.container.appendChild(header);
+            this.container.appendChild(list);
+
+            // Re-append modals and toast if they exist
+            if (featureModal) this.container.appendChild(featureModal);
+            if (commentModal) this.container.appendChild(commentModal);
+            if (toast) this.container.appendChild(toast);
 
             this.container.removeAttribute("data-loading");
             this.attachEventListeners();
         }
 
         /**
-         * Render a feature card
+         * Create a feature card element
          */
-        renderCard(feature) {
+        createCard(feature) {
+            const card = this.cloneTemplate("card");
+            if (!card) return null;
+
             const voteClass =
                 feature.votes > 0
                     ? "wfl-vote-positive"
@@ -128,184 +168,145 @@
                     ? this.t.comment || "comment"
                     : this.t.comments || "comments";
 
-            return `
-        <div class="wfl-card" data-id="${feature.id}">
-          <div class="wfl-vote">
-            <button class="wfl-vote-btn wfl-vote-up wfl-tooltip ${upVoted ? "wfl-voted" : ""}"
-                    data-id="${feature.id}"
-                    data-action="up"
-                    data-tooltip="${this.t.upvote || "Upvote"}">
-              ${this.icons.arrowUp || ""}
-            </button>
-            <span class="wfl-vote-count ${voteClass}" data-id="${feature.id}">${feature.votes}</span>
-            <button class="wfl-vote-btn wfl-vote-down wfl-tooltip ${downVoted ? "wfl-voted" : ""}"
-                    data-id="${feature.id}"
-                    data-action="down"
-                    data-tooltip="${this.t.downvote || "Downvote"}">
-              ${this.icons.arrowDown || ""}
-            </button>
-          </div>
-          <div class="wfl-content">
-            <div class="wfl-content-header">
-              <h3 class="wfl-feature-title" data-id="${feature.id}">${feature.title}</h3>
-              ${this.renderStatus(feature.status)}
-            </div>
-            <p class="wfl-description">${feature.description || ""}</p>
-            <div class="wfl-footer">
-              <button class="wfl-meta wfl-comment-trigger" data-id="${feature.id}">
-                ${this.icons.comment || ""}
-                <span>${feature.commentsCount} ${commentText}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      `;
+            // Set data attributes
+            card.dataset.id = feature.id;
+
+            // Vote up button
+            const upBtn = card.querySelector(".wfl-vote-up");
+            upBtn.dataset.id = feature.id;
+            upBtn.dataset.tooltip = this.t.upvote || "Upvote";
+            if (upVoted) upBtn.classList.add("wfl-voted");
+
+            // Vote count
+            const voteCount = card.querySelector(".wfl-vote-count");
+            voteCount.dataset.id = feature.id;
+            voteCount.textContent = feature.votes;
+            if (voteClass) voteCount.classList.add(voteClass);
+
+            // Vote down button
+            const downBtn = card.querySelector(".wfl-vote-down");
+            downBtn.dataset.id = feature.id;
+            downBtn.dataset.tooltip = this.t.downvote || "Downvote";
+            if (downVoted) downBtn.classList.add("wfl-voted");
+
+            // Title
+            const title = card.querySelector(".wfl-feature-title");
+            title.dataset.id = feature.id;
+            title.textContent = feature.title;
+
+            // Status
+            const status = card.querySelector(".wfl-status");
+            const statusLabel = status.querySelector(".wfl-status-label");
+            status.className = `wfl-status wfl-status-${feature.status || "open"}`;
+            statusLabel.textContent = this.getStatusLabel(feature.status || "open");
+
+            // Description
+            const desc = card.querySelector(".wfl-description");
+            desc.textContent = feature.description || "";
+
+            // Comments
+            const commentTrigger = card.querySelector(".wfl-comment-trigger");
+            commentTrigger.dataset.id = feature.id;
+            const commentCount = card.querySelector(".wfl-comment-count");
+            commentCount.textContent = `${feature.commentsCount} ${commentText}`;
+
+            return card;
         }
 
         /**
-         * Render status badge
+         * Get status label
          */
-        renderStatus(status) {
+        getStatusLabel(status) {
             const labels = {
                 open: this.t.statusOpen || "Open",
                 planned: this.t.statusPlanned || "Planned",
                 progress: this.t.statusProgress || "In Progress",
                 completed: this.t.statusCompleted || "Completed",
             };
-
-            return `
-        <span class="wfl-status wfl-status-${status}">
-          <span class="wfl-status-dot"></span>
-          ${labels[status] || status}
-        </span>
-      `;
-        }
-
-        /**
-         * Render empty state
-         */
-        renderEmpty() {
-            return `
-        <div class="wfl-empty">
-          <div class="wfl-empty-icon">${this.icons.empty || ""}</div>
-          <h3 class="wfl-empty-title">${this.t.emptyTitle || "No features yet"}</h3>
-          <p class="wfl-empty-text">${this.t.emptyText || "Be the first to suggest a feature!"}</p>
-        </div>
-      `;
+            return labels[status] || status;
         }
 
         /**
          * Render error state
          */
         renderError() {
-            this.container.innerHTML = `
-        <div class="wfl-header">
-          <div class="wfl-header-content">
-            <h1 class="wfl-title">${this.t.title || "What's Next?"}</h1>
-            <p class="wfl-subtitle">${this.t.subtitle || "Help us build what matters to you"}</p>
-          </div>
-        </div>
-        <div class="wfl-error">
-          <div class="wfl-error-icon">${this.icons.error || ""}</div>
-          <h3 class="wfl-error-title">${this.t.errorTitle || "Failed to load features"}</h3>
-          <p class="wfl-error-text">${this.t.errorText || "Please try again later."}</p>
-          <button class="wfl-btn wfl-btn-primary" id="wfl-retry">
-            ${this.t.retry || "Retry"}
-          </button>
-        </div>
-      `;
+            // Clone header template
+            const headerTemplate = this.getTemplate("header");
+            const header = headerTemplate.content.cloneNode(true);
 
-            this.container
-                .querySelector("#wfl-retry")
-                ?.addEventListener("click", () => this.loadFeatures());
+            // Clone error template
+            const error = this.cloneTemplate("error");
+
+            // Clear container and rebuild
+            this.container.innerHTML = "";
+            this.container.appendChild(header);
+            if (error) {
+                this.container.appendChild(error);
+                // Attach retry listener
+                const retryBtn = this.container.querySelector(".wfl-retry-btn");
+                if (retryBtn) {
+                    retryBtn.addEventListener("click", () => this.loadFeatures());
+                }
+            }
+
+            this.container.removeAttribute("data-loading");
         }
 
         /**
-         * Render feature creation modal
+         * Create a comment element
          */
-        renderModal() {
-            if (!this.config.can_interact) return "";
+        createComment(comment) {
+            const el = this.cloneTemplate("comment");
+            if (!el) return null;
 
-            return `
-        <div class="wfl-modal-overlay" id="wfl-modal">
-          <div class="wfl-modal">
-            <div class="wfl-modal-header">
-              <h2 class="wfl-modal-title">${this.t.suggestTitle || "Suggest a Feature"}</h2>
-              <button class="wfl-modal-close" id="wfl-modal-close">
-                ${this.icons.close || ""}
-              </button>
-            </div>
-            <div class="wfl-modal-body">
-              <div class="wfl-form-group">
-                <label class="wfl-label" for="wfl-feature-title">${this.t.titleLabel || "Title"}</label>
-                <input type="text" class="wfl-input" id="wfl-feature-title" placeholder="${this.t.titlePlaceholder || "Brief description of your feature idea"}">
-              </div>
-              <div class="wfl-form-group">
-                <label class="wfl-label" for="wfl-feature-desc">${this.t.descriptionLabel || "Description"}</label>
-                <textarea class="wfl-textarea" id="wfl-feature-desc" placeholder="${this.t.descriptionPlaceholder || "Explain the feature and why it would be valuable..."}"></textarea>
-              </div>
-            </div>
-            <div class="wfl-modal-footer">
-              <button class="wfl-btn wfl-btn-secondary" id="wfl-modal-cancel">${this.t.cancel || "Cancel"}</button>
-              <button class="wfl-btn wfl-btn-primary wfl-ripple" id="wfl-modal-submit">${this.t.submit || "Submit Feature"}</button>
-            </div>
-          </div>
-        </div>
-      `;
-        }
+            if (comment.isTeamReply) {
+                el.classList.add("wfl-comment-team");
+            }
 
-        /**
-         * Render comments modal
-         */
-        renderCommentModal() {
-            return `
-        <div class="wfl-modal-overlay" id="wfl-comment-modal">
-          <div class="wfl-modal">
-            <div class="wfl-modal-header">
-              <h2 class="wfl-modal-title" id="wfl-comment-title">${this.t.comments || "Comments"}</h2>
-              <button class="wfl-modal-close" id="wfl-comment-modal-close">
-                ${this.icons.close || ""}
-              </button>
-            </div>
-            <div class="wfl-modal-body">
-              <div class="wfl-comments-list" id="wfl-comments-list"></div>
-              <div class="wfl-comment-input-wrapper">
-                <input type="text" class="wfl-comment-input" id="wfl-comment-input" placeholder="${this.t.addComment || "Add a comment..."}">
-                <button class="wfl-comment-submit" id="wfl-comment-submit">
-                  ${this.icons.send || ""}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
+            const avatar = el.querySelector(".wfl-comment-avatar");
+            avatar.textContent = comment.initials || "?";
+            if (comment.isTeamReply) {
+                avatar.classList.add("wfl-comment-avatar-team");
+            }
+
+            const content = el.querySelector(".wfl-comment-content");
+            if (comment.isTeamReply) {
+                content.classList.add("wfl-comment-content-team");
+            }
+
+            const author = el.querySelector(".wfl-comment-author");
+            author.textContent = comment.author || "Anonymous";
+
+            const teamBadge = el.querySelector(".wfl-comment-team-badge");
+            if (comment.isTeamReply && teamBadge) {
+                teamBadge.style.display = "";
+            }
+
+            const time = el.querySelector(".wfl-comment-time");
+            time.textContent = comment.time || "";
+
+            const text = el.querySelector(".wfl-comment-text");
+            text.textContent = comment.text || "";
+
+            return el;
         }
 
         /**
          * Render comments list
          */
-        renderCommentsList(comments) {
+        renderCommentsList(comments, container) {
+            container.innerHTML = "";
+
             if (comments.length === 0) {
-                return `<p style="text-align: center; color: var(--wfl-gray-500); padding: 20px;">${this.t.noComments || "No comments yet."}</p>`;
+                const noComments = this.cloneTemplate("no-comments");
+                if (noComments) container.appendChild(noComments);
+                return;
             }
 
-            return comments
-                .map(
-                    (c) => `
-          <div class="wfl-comment${c.isTeamReply ? " wfl-comment-team" : ""}">
-            <div class="wfl-comment-avatar${c.isTeamReply ? " wfl-comment-avatar-team" : ""}">${c.initials || "?"}</div>
-            <div class="wfl-comment-content${c.isTeamReply ? " wfl-comment-content-team" : ""}">
-              <div class="wfl-comment-header">
-                <span class="wfl-comment-author">${c.author || "Anonymous"}</span>
-                ${c.isTeamReply ? '<span class="wfl-comment-team-badge">Team</span>' : ""}
-                <span class="wfl-comment-time">${c.time || ""}</span>
-              </div>
-              <p class="wfl-comment-text">${c.text || ""}</p>
-            </div>
-          </div>
-        `,
-                )
-                .join("");
+            comments.forEach((c) => {
+                const comment = this.createComment(c);
+                if (comment) container.appendChild(comment);
+            });
         }
 
         /**
@@ -313,7 +314,7 @@
          */
         attachEventListeners() {
             // Add feature button
-            const addBtn = this.container.querySelector("#wfl-add-feature");
+            const addBtn = this.container.querySelector(".wfl-add-feature-btn");
             if (addBtn) {
                 addBtn.addEventListener("click", () => this.openModal());
             }
@@ -321,34 +322,24 @@
             // Modal events
             const modal = this.container.querySelector("#wfl-modal");
             if (modal) {
-                const modalClose =
-                    this.container.querySelector("#wfl-modal-close");
-                const modalCancel =
-                    this.container.querySelector("#wfl-modal-cancel");
-                const modalSubmit =
-                    this.container.querySelector("#wfl-modal-submit");
+                const modalClose = this.container.querySelector("#wfl-modal-close");
+                const modalCancel = this.container.querySelector("#wfl-modal-cancel");
+                const modalSubmit = this.container.querySelector("#wfl-modal-submit");
 
                 modalClose?.addEventListener("click", () => this.closeModal());
                 modalCancel?.addEventListener("click", () => this.closeModal());
                 modal.addEventListener("click", (e) => {
                     if (e.target === modal) this.closeModal();
                 });
-                modalSubmit?.addEventListener("click", () =>
-                    this.handleSubmitFeature(),
-                );
+                modalSubmit?.addEventListener("click", () => this.handleSubmitFeature());
             }
 
             // Comment modal events
-            const commentModal =
-                this.container.querySelector("#wfl-comment-modal");
+            const commentModal = this.container.querySelector("#wfl-comment-modal");
             if (commentModal) {
-                const commentClose = this.container.querySelector(
-                    "#wfl-comment-modal-close",
-                );
+                const commentClose = this.container.querySelector("#wfl-comment-modal-close");
 
-                commentClose?.addEventListener("click", () =>
-                    this.closeCommentModal(),
-                );
+                commentClose?.addEventListener("click", () => this.closeCommentModal());
                 commentModal.addEventListener("click", (e) => {
                     if (e.target === commentModal) this.closeCommentModal();
                 });
@@ -362,9 +353,7 @@
          * Attach listeners to a specific card
          */
         attachCardListeners(featureId) {
-            const card = this.container.querySelector(
-                `.wfl-card[data-id="${featureId}"]`,
-            );
+            const card = this.container.querySelector(`.wfl-card[data-id="${featureId}"]`);
             if (!card) return;
 
             // Vote buttons
@@ -401,8 +390,10 @@
             const modal = this.container.querySelector("#wfl-modal");
             if (modal) {
                 modal.classList.remove("wfl-active");
-                this.container.querySelector("#wfl-feature-title").value = "";
-                this.container.querySelector("#wfl-feature-desc").value = "";
+                const titleInput = this.container.querySelector("#wfl-feature-title");
+                const descInput = this.container.querySelector("#wfl-feature-desc");
+                if (titleInput) titleInput.value = "";
+                if (descInput) descInput.value = "";
             }
         }
 
@@ -410,68 +401,52 @@
          * Handle feature submission
          */
         async handleSubmitFeature() {
-            const title = this.container
-                .querySelector("#wfl-feature-title")
-                .value.trim();
-            const description = this.container
-                .querySelector("#wfl-feature-desc")
-                .value.trim();
+            const titleInput = this.container.querySelector("#wfl-feature-title");
+            const descInput = this.container.querySelector("#wfl-feature-desc");
+            const title = titleInput?.value.trim() || "";
+            const description = descInput?.value.trim() || "";
 
             if (!title || !description) {
-                this.showToast(
-                    this.t.fillAllFields || "Please fill in all fields",
-                    "error",
-                );
+                this.showToast(this.t.fillAllFields || "Please fill in all fields", "error");
                 return;
             }
 
             const submitBtn = this.container.querySelector("#wfl-modal-submit");
-            submitBtn.disabled = true;
+            if (submitBtn) submitBtn.disabled = true;
 
             try {
-                const response = await this.ajax("create_feature", {
-                    title,
-                    description,
-                });
+                const response = await this.ajax("create_feature", { title, description });
 
                 if (response.success) {
                     const newFeature = response.data;
                     this.features.unshift(newFeature);
 
                     const list = this.container.querySelector("#wfl-list");
-                    const emptyEl = list.querySelector(".wfl-empty");
-                    if (emptyEl) {
-                        emptyEl.remove();
-                    }
+                    const emptyEl = list?.querySelector(".wfl-empty");
+                    if (emptyEl) emptyEl.remove();
 
-                    list.insertAdjacentHTML(
-                        "afterbegin",
-                        this.renderCard(newFeature),
-                    );
-                    this.attachCardListeners(newFeature.id);
+                    const newCard = this.createCard(newFeature);
+                    if (newCard && list) {
+                        list.insertBefore(newCard, list.firstChild);
+                        this.attachCardListeners(newFeature.id);
+                    }
 
                     this.closeModal();
                     this.showToast(
-                        this.t.featureSubmitted ||
-                            "Feature submitted successfully!",
-                        "success",
+                        this.t.featureSubmitted || "Feature submitted successfully!",
+                        "success"
                     );
                 } else {
                     this.showToast(
-                        response.data?.message ||
-                            this.t.errorText ||
-                            "Please try again later.",
-                        "error",
+                        response.data?.message || this.t.errorText || "Please try again later.",
+                        "error"
                     );
                 }
             } catch (error) {
                 console.error("WPFeatureLoop: Failed to create feature", error);
-                this.showToast(
-                    this.t.errorText || "Please try again later.",
-                    "error",
-                );
+                this.showToast(this.t.errorText || "Please try again later.", "error");
             } finally {
-                submitBtn.disabled = false;
+                if (submitBtn) submitBtn.disabled = false;
             }
         }
 
@@ -483,41 +458,43 @@
             if (!feature) return;
 
             this.currentCommentFeatureId = featureId;
-            const commentModal =
-                this.container.querySelector("#wfl-comment-modal");
-            const commentsList =
-                this.container.querySelector("#wfl-comments-list");
-            const commentTitle =
-                this.container.querySelector("#wfl-comment-title");
-            const commentInput =
-                this.container.querySelector("#wfl-comment-input");
+            const commentModal = this.container.querySelector("#wfl-comment-modal");
+            const commentsList = this.container.querySelector("#wfl-comments-list");
+            const commentTitle = this.container.querySelector("#wfl-comment-title");
+            const commentInput = this.container.querySelector("#wfl-comment-input");
 
             // Clear input and show modal
-            commentInput.value = "";
-            commentTitle.textContent = feature.title;
-            commentsList.innerHTML =
-                '<div class="wfl-skeleton" style="height: 60px; margin-bottom: 12px;"></div>'.repeat(
-                    2,
-                );
-            commentModal.classList.add("wfl-active");
+            if (commentInput) commentInput.value = "";
+            if (commentTitle) commentTitle.textContent = feature.title;
+
+            // Show loading skeleton
+            if (commentsList) {
+                const skeleton = this.cloneTemplate("skeleton");
+                commentsList.innerHTML = "";
+                if (skeleton) commentsList.appendChild(skeleton);
+            }
+
+            if (commentModal) commentModal.classList.add("wfl-active");
 
             try {
-                const response = await this.ajax("get_comments", {
-                    feature_id: featureId,
-                });
+                const response = await this.ajax("get_comments", { feature_id: featureId });
 
                 if (response.success) {
                     this.currentComments = response.data.comments || [];
-                    commentsList.innerHTML = this.renderCommentsList(
-                        this.currentComments,
-                    );
+                    if (commentsList) {
+                        this.renderCommentsList(this.currentComments, commentsList);
+                    }
                     this.attachCommentListeners(featureId, feature);
                 } else {
-                    commentsList.innerHTML = `<p style="text-align: center; color: var(--wfl-danger);">${this.t.errorText || "Please try again later."}</p>`;
+                    if (commentsList) {
+                        commentsList.innerHTML = `<p style="text-align: center; color: var(--wfl-danger);">${this.t.errorText || "Please try again later."}</p>`;
+                    }
                 }
             } catch (error) {
                 console.error("WPFeatureLoop: Failed to load comments", error);
-                commentsList.innerHTML = `<p style="text-align: center; color: var(--wfl-danger);">${this.t.errorText || "Please try again later."}</p>`;
+                if (commentsList) {
+                    commentsList.innerHTML = `<p style="text-align: center; color: var(--wfl-danger);">${this.t.errorText || "Please try again later."}</p>`;
+                }
             }
         }
 
@@ -526,20 +503,16 @@
          */
         attachCommentListeners(featureId, feature) {
             const self = this;
-            const commentsList =
-                this.container.querySelector("#wfl-comments-list");
+            const commentsList = this.container.querySelector("#wfl-comments-list");
 
             const handleSubmit = async () => {
-                const input =
-                    self.container.querySelector("#wfl-comment-input");
-                const submitBtn = self.container.querySelector(
-                    "#wfl-comment-submit",
-                );
-                const text = input.value.trim();
+                const input = self.container.querySelector("#wfl-comment-input");
+                const submitBtn = self.container.querySelector("#wfl-comment-submit");
+                const text = input?.value.trim() || "";
 
                 if (!text) return;
 
-                submitBtn.disabled = true;
+                if (submitBtn) submitBtn.disabled = true;
 
                 try {
                     const response = await self.ajax("add_comment", {
@@ -550,84 +523,67 @@
                     if (response.success) {
                         const newComment = response.data;
                         self.currentComments.push(newComment);
-                        commentsList.innerHTML = self.renderCommentsList(
-                            self.currentComments,
-                        );
+                        if (commentsList) {
+                            self.renderCommentsList(self.currentComments, commentsList);
+                        }
 
                         // Update comment count on card
                         feature.commentsCount = self.currentComments.length;
-                        const card = self.container.querySelector(
-                            `.wfl-card[data-id="${featureId}"]`,
-                        );
-                        const commentTrigger = card?.querySelector(
-                            ".wfl-comment-trigger span",
-                        );
-                        if (commentTrigger) {
+                        const card = self.container.querySelector(`.wfl-card[data-id="${featureId}"]`);
+                        const commentCount = card?.querySelector(".wfl-comment-count");
+                        if (commentCount) {
                             const commentText =
                                 feature.commentsCount === 1
                                     ? self.t.comment || "comment"
                                     : self.t.comments || "comments";
-                            commentTrigger.textContent = `${feature.commentsCount} ${commentText}`;
+                            commentCount.textContent = `${feature.commentsCount} ${commentText}`;
                         }
 
-                        input.value = "";
-                        self.showToast(
-                            self.t.commentAdded || "Comment added!",
-                            "success",
-                        );
+                        if (input) input.value = "";
+                        self.showToast(self.t.commentAdded || "Comment added!", "success");
                     } else {
                         self.showToast(
-                            response.data?.message ||
-                                self.t.errorText ||
-                                "Please try again later.",
-                            "error",
+                            response.data?.message || self.t.errorText || "Please try again later.",
+                            "error"
                         );
                     }
                 } catch (error) {
-                    console.error(
-                        "WPFeatureLoop: Failed to add comment",
-                        error,
-                    );
-                    self.showToast(
-                        self.t.errorText || "Please try again later.",
-                        "error",
-                    );
+                    console.error("WPFeatureLoop: Failed to add comment", error);
+                    self.showToast(self.t.errorText || "Please try again later.", "error");
                 } finally {
-                    submitBtn.disabled = false;
+                    if (submitBtn) submitBtn.disabled = false;
                 }
             };
 
             // Replace elements to remove old listeners
-            const oldSubmit = this.container.querySelector(
-                "#wfl-comment-submit",
-            );
+            const oldSubmit = this.container.querySelector("#wfl-comment-submit");
             const oldInput = this.container.querySelector("#wfl-comment-input");
 
-            const newSubmit = oldSubmit.cloneNode(true);
-            oldSubmit.parentNode.replaceChild(newSubmit, oldSubmit);
-            newSubmit.addEventListener("click", handleSubmit);
+            if (oldSubmit) {
+                const newSubmit = oldSubmit.cloneNode(true);
+                oldSubmit.parentNode.replaceChild(newSubmit, oldSubmit);
+                newSubmit.addEventListener("click", handleSubmit);
+            }
 
-            const newInput = oldInput.cloneNode(true);
-            oldInput.parentNode.replaceChild(newInput, oldInput);
-            newInput.addEventListener("keypress", (e) => {
-                if (e.key === "Enter") handleSubmit();
-            });
+            if (oldInput) {
+                const newInput = oldInput.cloneNode(true);
+                oldInput.parentNode.replaceChild(newInput, oldInput);
+                newInput.addEventListener("keypress", (e) => {
+                    if (e.key === "Enter") handleSubmit();
+                });
+            }
         }
 
         /**
          * Close comments modal
          */
         closeCommentModal() {
-            const commentModal =
-                this.container.querySelector("#wfl-comment-modal");
+            const commentModal = this.container.querySelector("#wfl-comment-modal");
             if (commentModal) {
                 commentModal.classList.remove("wfl-active");
 
-                const commentInput =
-                    this.container.querySelector("#wfl-comment-input");
-                if (commentInput) {
-                    commentInput.value = "";
-                }
+                const commentInput = this.container.querySelector("#wfl-comment-input");
+                if (commentInput) commentInput.value = "";
 
                 this.currentCommentFeatureId = null;
                 this.currentComments = [];
@@ -640,22 +596,18 @@
         async handleVote(btn) {
             const id = btn.dataset.id;
             const action = btn.dataset.action;
-            const feature = this.features.find(
-                (f) => String(f.id) === String(id),
-            );
+            const feature = this.features.find((f) => String(f.id) === String(id));
 
             if (!feature) return;
 
-            const card = this.container.querySelector(
-                `.wfl-card[data-id="${id}"]`,
-            );
-            const voteCount = card.querySelector(".wfl-vote-count");
-            const upBtn = card.querySelector(".wfl-vote-up");
-            const downBtn = card.querySelector(".wfl-vote-down");
+            const card = this.container.querySelector(`.wfl-card[data-id="${id}"]`);
+            const voteCount = card?.querySelector(".wfl-vote-count");
+            const upBtn = card?.querySelector(".wfl-vote-up");
+            const downBtn = card?.querySelector(".wfl-vote-down");
 
             // Disable buttons during request
-            upBtn.disabled = true;
-            downBtn.disabled = true;
+            if (upBtn) upBtn.disabled = true;
+            if (downBtn) downBtn.disabled = true;
 
             // Store original values for rollback
             const originalVotes = feature.votes;
@@ -694,14 +646,16 @@
             feature.userVote = newVoteType === "none" ? null : newVoteType;
 
             // Update UI
-            this.updateVoteUI(card, feature);
+            if (card) this.updateVoteUI(card, feature);
 
             // Animation
-            voteCount.classList.add("wfl-animating");
-            setTimeout(() => voteCount.classList.remove("wfl-animating"), 300);
+            if (voteCount) {
+                voteCount.classList.add("wfl-animating");
+                setTimeout(() => voteCount.classList.remove("wfl-animating"), 300);
+            }
 
             // Confetti on upvote
-            if (action === "up" && newVoteType === "up") {
+            if (action === "up" && newVoteType === "up" && upBtn) {
                 this.createConfetti(upBtn);
             }
 
@@ -715,30 +669,24 @@
                     // Sync with server response
                     feature.votes = response.data.totalVotes;
                     feature.userVote = response.data.vote;
-                    this.updateVoteUI(card, feature);
+                    if (card) this.updateVoteUI(card, feature);
                 } else {
                     // Revert on error
                     feature.votes = originalVotes;
                     feature.userVote = originalUserVote;
-                    this.updateVoteUI(card, feature);
-                    this.showToast(
-                        this.t.errorText || "Please try again later.",
-                        "error",
-                    );
+                    if (card) this.updateVoteUI(card, feature);
+                    this.showToast(this.t.errorText || "Please try again later.", "error");
                 }
             } catch (error) {
                 console.error("WPFeatureLoop: Failed to save vote", error);
                 // Revert on error
                 feature.votes = originalVotes;
                 feature.userVote = originalUserVote;
-                this.updateVoteUI(card, feature);
-                this.showToast(
-                    this.t.errorText || "Please try again later.",
-                    "error",
-                );
+                if (card) this.updateVoteUI(card, feature);
+                this.showToast(this.t.errorText || "Please try again later.", "error");
             } finally {
-                upBtn.disabled = false;
-                downBtn.disabled = false;
+                if (upBtn) upBtn.disabled = false;
+                if (downBtn) downBtn.disabled = false;
             }
         }
 
@@ -750,17 +698,17 @@
             const upBtn = card.querySelector(".wfl-vote-up");
             const downBtn = card.querySelector(".wfl-vote-down");
 
-            upBtn.classList.toggle("wfl-voted", feature.userVote === "up");
-            downBtn.classList.toggle("wfl-voted", feature.userVote === "down");
-            voteCount.textContent = feature.votes;
-            voteCount.classList.remove(
-                "wfl-vote-positive",
-                "wfl-vote-negative",
-            );
-            if (feature.votes > 0) {
-                voteCount.classList.add("wfl-vote-positive");
-            } else if (feature.votes < 0) {
-                voteCount.classList.add("wfl-vote-negative");
+            if (upBtn) upBtn.classList.toggle("wfl-voted", feature.userVote === "up");
+            if (downBtn) downBtn.classList.toggle("wfl-voted", feature.userVote === "down");
+
+            if (voteCount) {
+                voteCount.textContent = feature.votes;
+                voteCount.classList.remove("wfl-vote-positive", "wfl-vote-negative");
+                if (feature.votes > 0) {
+                    voteCount.classList.add("wfl-vote-positive");
+                } else if (feature.votes < 0) {
+                    voteCount.classList.add("wfl-vote-negative");
+                }
             }
         }
 
@@ -768,13 +716,7 @@
          * Create confetti animation
          */
         createConfetti(element) {
-            const colors = [
-                "#3b82f6",
-                "#2563eb",
-                "#1d4ed8",
-                "#10b981",
-                "#f59e0b",
-            ];
+            const colors = ["#3b82f6", "#2563eb", "#1d4ed8", "#10b981", "#f59e0b"];
             const rect = element.getBoundingClientRect();
 
             for (let i = 0; i < 6; i++) {
@@ -782,8 +724,7 @@
                 confetti.className = "wfl-confetti";
                 confetti.style.left = `${rect.left + rect.width / 2 + (Math.random() - 0.5) * 30}px`;
                 confetti.style.top = `${rect.top + rect.height / 2}px`;
-                confetti.style.background =
-                    colors[Math.floor(Math.random() * colors.length)];
+                confetti.style.background = colors[Math.floor(Math.random() * colors.length)];
                 confetti.style.position = "fixed";
                 document.body.appendChild(confetti);
 

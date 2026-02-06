@@ -8,6 +8,7 @@ namespace WPFeatureLoop;
  * Widget Renderer
  *
  * Renders the feature voting widget with the same UI/UX as the JS SDK.
+ * Uses template files instead of inline HTML strings.
  */
 class Widget
 {
@@ -25,6 +26,11 @@ class Widget
      * Translations
      */
     private array $translations;
+
+    /**
+     * Path to templates directory
+     */
+    private string $templatesPath;
 
     /**
      * SVG Icons
@@ -115,6 +121,7 @@ class Widget
      * @param array $config Widget configuration
      *                      - locale: 'en' or 'pt-BR' (default: 'en')
      *                      - container_id: HTML container ID (default: 'wpfeatureloop')
+     *                      - templates_path: Custom templates directory (optional)
      */
     public function __construct(Client $client, array $config = [])
     {
@@ -122,10 +129,15 @@ class Widget
         $this->config = array_merge([
             'locale' => 'en',
             'container_id' => 'wpfeatureloop',
+            'templates_path' => null,
         ], $config);
 
         $locale = $this->config['locale'];
         $this->translations = self::DEFAULT_TRANSLATIONS[$locale] ?? self::DEFAULT_TRANSLATIONS['en'];
+
+        // Default templates path is relative to this file
+        $this->templatesPath = $this->config['templates_path']
+            ?? dirname(__DIR__) . '/templates';
     }
 
     /**
@@ -145,68 +157,42 @@ class Widget
     }
 
     /**
+     * Render a template file with variables
+     */
+    private function renderTemplate(string $template, array $vars = []): string
+    {
+        $templateFile = $this->templatesPath . '/' . $template . '.php';
+
+        if (!file_exists($templateFile)) {
+            return "<!-- Template not found: {$template} -->";
+        }
+
+        // Extract variables to local scope
+        extract($vars, EXTR_SKIP);
+
+        ob_start();
+        include $templateFile;
+        return ob_get_clean();
+    }
+
+    /**
      * Render the widget container (skeleton)
      *
      * @return string HTML
      */
     public function render(): string
     {
-        $containerId = esc_attr($this->config['container_id']);
+        $skeletonHtml = $this->renderTemplate('skeleton');
 
-        return sprintf(
-            '<div id="%s" class="wfl-container" data-loading="true">%s</div>',
-            $containerId,
-            $this->renderSkeleton()
-        );
-    }
-
-    /**
-     * Render skeleton loading state
-     */
-    private function renderSkeleton(): string
-    {
-        $skeletonCard = '
-            <div class="wfl-skeleton-card">
-                <div class="wfl-skeleton-vote">
-                    <div class="wfl-skeleton wfl-skeleton-vote-btn"></div>
-                    <div class="wfl-skeleton wfl-skeleton-vote-count"></div>
-                    <div class="wfl-skeleton wfl-skeleton-vote-btn"></div>
-                </div>
-                <div class="wfl-skeleton-content">
-                    <div class="wfl-skeleton wfl-skeleton-title"></div>
-                    <div class="wfl-skeleton wfl-skeleton-desc"></div>
-                    <div class="wfl-skeleton wfl-skeleton-desc-2"></div>
-                    <div class="wfl-skeleton-footer">
-                        <div class="wfl-skeleton wfl-skeleton-meta"></div>
-                        <div class="wfl-skeleton wfl-skeleton-tag"></div>
-                    </div>
-                </div>
-            </div>
-        ';
-
-        $canCreate = $this->client->canInteract();
-        $addButton = $canCreate ? sprintf(
-            '<button class="wfl-btn wfl-btn-primary wfl-ripple" disabled>%s %s</button>',
-            $this->icon('plus'),
-            esc_html($this->t('suggestFeature'))
-        ) : '';
-
-        return sprintf(
-            '
-            <div class="wfl-header">
-                <div class="wfl-header-content">
-                    <h1 class="wfl-title">%s</h1>
-                    <p class="wfl-subtitle">%s</p>
-                </div>
-                %s
-            </div>
-            <div class="wfl-list">%s</div>
-            ',
-            esc_html($this->t('title')),
-            esc_html($this->t('subtitle')),
-            $addButton,
-            $skeletonCard
-        );
+        return $this->renderTemplate('widget', [
+            'container_id' => $this->config['container_id'],
+            'title' => $this->t('title'),
+            'subtitle' => $this->t('subtitle'),
+            'can_interact' => $this->client->canInteract(),
+            'suggest_feature_text' => $this->t('suggestFeature'),
+            'icon_plus' => $this->icon('plus'),
+            'skeleton_html' => $skeletonHtml,
+        ]);
     }
 
     /**
@@ -217,67 +203,29 @@ class Widget
      */
     public function renderCard(array $feature): string
     {
-        $id = esc_attr($feature['id']);
-        $title = esc_html($feature['title']);
-        $description = esc_html($feature['description'] ?? '');
         $votes = (int) ($feature['votes'] ?? 0);
         $commentsCount = (int) ($feature['commentsCount'] ?? 0);
-        $status = $feature['status'] ?? 'open';
         $userVote = $feature['userVote'] ?? null;
 
-        $voteClass = $votes > 0 ? 'wfl-vote-positive' : ($votes < 0 ? 'wfl-vote-negative' : '');
-        $upVoted = $userVote === 'up';
-        $downVoted = $userVote === 'down';
-        $commentText = $commentsCount === 1 ? $this->t('comment') : $this->t('comments');
-
-        return sprintf(
-            '
-            <div class="wfl-card" data-id="%s">
-                <div class="wfl-vote">
-                    <button class="wfl-vote-btn wfl-vote-up wfl-tooltip %s" data-id="%s" data-action="up" data-tooltip="%s">
-                        %s
-                    </button>
-                    <span class="wfl-vote-count %s" data-id="%s">%d</span>
-                    <button class="wfl-vote-btn wfl-vote-down wfl-tooltip %s" data-id="%s" data-action="down" data-tooltip="%s">
-                        %s
-                    </button>
-                </div>
-                <div class="wfl-content">
-                    <div class="wfl-content-header">
-                        <h3 class="wfl-feature-title" data-id="%s">%s</h3>
-                        %s
-                    </div>
-                    <p class="wfl-description">%s</p>
-                    <div class="wfl-footer">
-                        <button class="wfl-meta wfl-comment-trigger" data-id="%s">
-                            %s
-                            <span>%d %s</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-            ',
-            $id,
-            $upVoted ? 'wfl-voted' : '',
-            $id,
-            esc_attr($this->t('upvote')),
-            $this->icon('arrowUp'),
-            $voteClass,
-            $id,
-            $votes,
-            $downVoted ? 'wfl-voted' : '',
-            $id,
-            esc_attr($this->t('downvote')),
-            $this->icon('arrowDown'),
-            $id,
-            $title,
-            $this->renderStatus($status),
-            $description,
-            $id,
-            $this->icon('comment'),
-            $commentsCount,
-            esc_html($commentText)
-        );
+        return $this->renderTemplate('card', [
+            'id' => $feature['id'],
+            'title' => $feature['title'],
+            'description' => $feature['description'] ?? '',
+            'votes' => $votes,
+            'comments_count' => $commentsCount,
+            'status' => $feature['status'] ?? 'open',
+            'user_vote' => $userVote,
+            'vote_class' => $votes > 0 ? 'wfl-vote-positive' : ($votes < 0 ? 'wfl-vote-negative' : ''),
+            'up_voted' => $userVote === 'up',
+            'down_voted' => $userVote === 'down',
+            'comment_text' => $commentsCount === 1 ? $this->t('comment') : $this->t('comments'),
+            'upvote_tooltip' => $this->t('upvote'),
+            'downvote_tooltip' => $this->t('downvote'),
+            'icon_arrow_up' => $this->icon('arrowUp'),
+            'icon_arrow_down' => $this->icon('arrowDown'),
+            'icon_comment' => $this->icon('comment'),
+            'status_html' => $this->renderStatus($feature['status'] ?? 'open'),
+        ]);
     }
 
     /**
@@ -292,13 +240,10 @@ class Widget
             'completed' => $this->t('statusCompleted'),
         ];
 
-        $label = $labels[$status] ?? $status;
-
-        return sprintf(
-            '<span class="wfl-status wfl-status-%s"><span class="wfl-status-dot"></span>%s</span>',
-            esc_attr($status),
-            esc_html($label)
-        );
+        return $this->renderTemplate('status', [
+            'status' => $status,
+            'label' => $labels[$status] ?? $status,
+        ]);
     }
 
     /**
@@ -306,18 +251,11 @@ class Widget
      */
     public function renderEmpty(): string
     {
-        return sprintf(
-            '
-            <div class="wfl-empty">
-                <div class="wfl-empty-icon">%s</div>
-                <h3 class="wfl-empty-title">%s</h3>
-                <p class="wfl-empty-text">%s</p>
-            </div>
-            ',
-            $this->icon('empty'),
-            esc_html($this->t('emptyTitle')),
-            esc_html($this->t('emptyText'))
-        );
+        return $this->renderTemplate('empty', [
+            'icon_empty' => $this->icon('empty'),
+            'empty_title' => $this->t('emptyTitle'),
+            'empty_text' => $this->t('emptyText'),
+        ]);
     }
 
     /**
@@ -325,20 +263,12 @@ class Widget
      */
     public function renderError(): string
     {
-        return sprintf(
-            '
-            <div class="wfl-error">
-                <div class="wfl-error-icon">%s</div>
-                <h3 class="wfl-error-title">%s</h3>
-                <p class="wfl-error-text">%s</p>
-                <button class="wfl-btn wfl-btn-primary" id="wfl-retry">%s</button>
-            </div>
-            ',
-            $this->icon('error'),
-            esc_html($this->t('errorTitle')),
-            esc_html($this->t('errorText')),
-            esc_html($this->t('retry'))
-        );
+        return $this->renderTemplate('error', [
+            'icon_error' => $this->icon('error'),
+            'error_title' => $this->t('errorTitle'),
+            'error_text' => $this->t('errorText'),
+            'retry_text' => $this->t('retry'),
+        ]);
     }
 
     /**
@@ -350,40 +280,16 @@ class Widget
             return '';
         }
 
-        return sprintf(
-            '
-            <div class="wfl-modal-overlay" id="wfl-modal">
-                <div class="wfl-modal">
-                    <div class="wfl-modal-header">
-                        <h2 class="wfl-modal-title">%s</h2>
-                        <button class="wfl-modal-close" id="wfl-modal-close">%s</button>
-                    </div>
-                    <div class="wfl-modal-body">
-                        <div class="wfl-form-group">
-                            <label class="wfl-label" for="wfl-feature-title">%s</label>
-                            <input type="text" class="wfl-input" id="wfl-feature-title" placeholder="%s">
-                        </div>
-                        <div class="wfl-form-group">
-                            <label class="wfl-label" for="wfl-feature-desc">%s</label>
-                            <textarea class="wfl-textarea" id="wfl-feature-desc" placeholder="%s"></textarea>
-                        </div>
-                    </div>
-                    <div class="wfl-modal-footer">
-                        <button class="wfl-btn wfl-btn-secondary" id="wfl-modal-cancel">%s</button>
-                        <button class="wfl-btn wfl-btn-primary wfl-ripple" id="wfl-modal-submit">%s</button>
-                    </div>
-                </div>
-            </div>
-            ',
-            esc_html($this->t('suggestTitle')),
-            $this->icon('close'),
-            esc_html($this->t('titleLabel')),
-            esc_attr($this->t('titlePlaceholder')),
-            esc_html($this->t('descriptionLabel')),
-            esc_attr($this->t('descriptionPlaceholder')),
-            esc_html($this->t('cancel')),
-            esc_html($this->t('submit'))
-        );
+        return $this->renderTemplate('modal-feature', [
+            'suggest_title' => $this->t('suggestTitle'),
+            'title_label' => $this->t('titleLabel'),
+            'title_placeholder' => $this->t('titlePlaceholder'),
+            'description_label' => $this->t('descriptionLabel'),
+            'description_placeholder' => $this->t('descriptionPlaceholder'),
+            'cancel_text' => $this->t('cancel'),
+            'submit_text' => $this->t('submit'),
+            'icon_close' => $this->icon('close'),
+        ]);
     }
 
     /**
@@ -391,29 +297,12 @@ class Widget
      */
     public function renderCommentModal(): string
     {
-        return sprintf(
-            '
-            <div class="wfl-modal-overlay" id="wfl-comment-modal">
-                <div class="wfl-modal">
-                    <div class="wfl-modal-header">
-                        <h2 class="wfl-modal-title" id="wfl-comment-title">%s</h2>
-                        <button class="wfl-modal-close" id="wfl-comment-modal-close">%s</button>
-                    </div>
-                    <div class="wfl-modal-body">
-                        <div class="wfl-comments-list" id="wfl-comments-list"></div>
-                        <div class="wfl-comment-input-wrapper">
-                            <input type="text" class="wfl-comment-input" id="wfl-comment-input" placeholder="%s">
-                            <button class="wfl-comment-submit" id="wfl-comment-submit">%s</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            ',
-            esc_html($this->t('comments')),
-            $this->icon('close'),
-            esc_attr($this->t('addComment')),
-            $this->icon('send')
-        );
+        return $this->renderTemplate('modal-comment', [
+            'comments_title' => $this->t('comments'),
+            'add_comment_placeholder' => $this->t('addComment'),
+            'icon_close' => $this->icon('close'),
+            'icon_send' => $this->icon('send'),
+        ]);
     }
 
     /**
@@ -421,7 +310,18 @@ class Widget
      */
     public function renderToast(): string
     {
-        return '<div class="wfl-toast" id="wfl-toast"></div>';
+        return $this->renderTemplate('toast');
+    }
+
+    /**
+     * Render JS templates (<template> tags for JavaScript)
+     */
+    public function renderJsTemplates(): string
+    {
+        return $this->renderTemplate('js-templates', [
+            'icons' => self::ICONS,
+            'translations' => $this->translations,
+        ]);
     }
 
     /**
