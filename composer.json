@@ -1,0 +1,33 @@
+{
+  "name": "eduardovillao/wpfeatureloop-sdk",
+  "description": "WPFeatureLoop SDK for WordPress plugins. Collect feature requests and feedback from your users.",
+  "type": "library",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "WPFeatureLoop",
+      "email": "hey@wpfeatureloop.com"
+    }
+  ],
+  "require": {
+    "php": ">=7.4"
+  },
+  "require-dev": {
+    "squizlabs/php_codesniffer": "^3.12"
+  },
+  "autoload": {
+    "psr-4": {
+      "WPFeatureLoop\\": "src/"
+    }
+  },
+  "scripts": {
+    "lint": "phpcs",
+    "lint:fix": "phpcbf"
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true,
+  "support": {
+    "issues": "https://github.com/eduardovillao/wpfeatureloop-php-sdk/issues",
+    "source": "https://github.com/eduardovillao/wpfeatureloop-php-sdk"
+  }
+}
