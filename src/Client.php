@@ -14,30 +14,52 @@ namespace WPFeatureLoop;
  * use WPFeatureLoop\Client;
  * use WPFeatureLoop\Widget;
  *
- * $client = new Client('pk_live_xxx', 'project_id');
+ * // Initialize client (REST API + assets registered automatically)
+ * $client = new Client('pk_live_xxx', 'project_id', [
+ *     'assets_url' => plugin_dir_url(__FILE__) . 'vendor/eduardovillao/wpfeatureloop-sdk/assets',
+ * ]);
  *
- * // Render widget
+ * // Render widget (just this, nothing else!)
  * $widget = new Widget($client, ['locale' => 'en']);
  * echo $widget->render();
- *
- * // Or use API directly
- * if ($client->canInteract()) {
- *     $client->createFeature('My feature idea', 'Description here');
- *     $client->vote('feature_id');
- * }
  * ```
  */
 class Client
 {
+    /**
+     * SDK Version (used for cache busting)
+     */
+    public const VERSION = '1.0.0';
+
+    /**
+     * Script/style handle
+     */
+    public const HANDLE = 'wpfeatureloop';
+
     /**
      * API client instance
      */
     private Api $api;
 
     /**
+     * REST API handler
+     */
+    private RestApi $restApi;
+
+    /**
      * Required capability for interactions
      */
     private string $capability;
+
+    /**
+     * Assets URL
+     */
+    private ?string $assetsUrl;
+
+    /**
+     * Whether assets have been registered
+     */
+    private static bool $assetsRegistered = false;
 
     /**
      * Constructor
@@ -47,13 +69,59 @@ class Client
      * @param array<string, mixed> $options Optional configuration
      *                                      - api_url: Custom API URL
      *                                      - capability: Required WP capability (default: 'read')
+     *                                      - assets_url: URL to SDK assets folder (required for assets)
      */
     public function __construct(string $publicKey, string $projectId, array $options = [])
     {
         $apiUrl = $options['api_url'] ?? null;
         $this->capability = $options['capability'] ?? 'read';
+        $this->assetsUrl = isset($options['assets_url']) ? rtrim($options['assets_url'], '/') : null;
 
         $this->api = new Api($publicKey, $projectId, $apiUrl);
+        $this->restApi = new RestApi($this);
+
+        // Auto-register REST API routes
+        add_action('rest_api_init', [$this->restApi, 'registerRoutes']);
+
+        // Register assets (not enqueue) - only once
+        if ($this->assetsUrl && !self::$assetsRegistered) {
+            add_action('admin_enqueue_scripts', [$this, 'registerAssets']);
+            self::$assetsRegistered = true;
+        }
+    }
+
+    /**
+     * Register CSS and JS assets (does not load them yet)
+     */
+    public function registerAssets(): void
+    {
+        if (!$this->assetsUrl) {
+            return;
+        }
+
+        wp_register_style(
+            self::HANDLE,
+            $this->assetsUrl . '/css/wpfeatureloop.css',
+            [],
+            self::VERSION
+        );
+
+        wp_register_script(
+            self::HANDLE,
+            $this->assetsUrl . '/js/wpfeatureloop.js',
+            [],
+            self::VERSION,
+            true
+        );
+    }
+
+    /**
+     * Enqueue the registered assets (call this when rendering widget)
+     */
+    public function enqueueAssets(): void
+    {
+        wp_enqueue_style(self::HANDLE);
+        wp_enqueue_script(self::HANDLE);
     }
 
     /**

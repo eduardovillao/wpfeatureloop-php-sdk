@@ -3,9 +3,8 @@
  * HTML templates for JavaScript consumption
  *
  * These <template> tags are cloned and populated by JS.
- * No inline HTML strings in JS!
+ * SVGs are inline - JS clones the whole template including icons.
  *
- * @var array $icons
  * @var array $translations
  */
 
@@ -15,18 +14,12 @@ defined('ABSPATH') || exit;
 <template id="wfl-template-card">
     <div class="wfl-card" data-id="">
         <div class="wfl-vote">
-            <button class="wfl-vote-btn wfl-vote-up wfl-tooltip"
-                    data-id=""
-                    data-action="up"
-                    data-tooltip="">
-                <?php echo $icons['arrowUp']; ?>
+            <button class="wfl-vote-btn wfl-vote-up wfl-tooltip" data-id="" data-action="up" data-tooltip="">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
             </button>
             <span class="wfl-vote-count" data-id=""></span>
-            <button class="wfl-vote-btn wfl-vote-down wfl-tooltip"
-                    data-id=""
-                    data-action="down"
-                    data-tooltip="">
-                <?php echo $icons['arrowDown']; ?>
+            <button class="wfl-vote-btn wfl-vote-down wfl-tooltip" data-id="" data-action="down" data-tooltip="">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
             </button>
         </div>
         <div class="wfl-content">
@@ -40,7 +33,7 @@ defined('ABSPATH') || exit;
             <p class="wfl-description"></p>
             <div class="wfl-footer">
                 <button class="wfl-meta wfl-comment-trigger" data-id="">
-                    <?php echo $icons['comment']; ?>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                     <span class="wfl-comment-count"></span>
                 </button>
             </div>
@@ -57,7 +50,9 @@ defined('ABSPATH') || exit;
 
 <template id="wfl-template-empty">
     <div class="wfl-empty">
-        <div class="wfl-empty-icon"><?php echo $icons['empty']; ?></div>
+        <div class="wfl-empty-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </div>
         <h3 class="wfl-empty-title"><?php echo esc_html($translations['emptyTitle']); ?></h3>
         <p class="wfl-empty-text"><?php echo esc_html($translations['emptyText']); ?></p>
     </div>
@@ -65,7 +60,9 @@ defined('ABSPATH') || exit;
 
 <template id="wfl-template-error">
     <div class="wfl-error">
-        <div class="wfl-error-icon"><?php echo $icons['error']; ?></div>
+        <div class="wfl-error-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/></svg>
+        </div>
         <h3 class="wfl-error-title"><?php echo esc_html($translations['errorTitle']); ?></h3>
         <p class="wfl-error-text"><?php echo esc_html($translations['errorText']); ?></p>
         <button class="wfl-btn wfl-btn-primary wfl-retry-btn">
@@ -99,7 +96,7 @@ defined('ABSPATH') || exit;
             <p class="wfl-subtitle"><?php echo esc_html($translations['subtitle']); ?></p>
         </div>
         <button class="wfl-btn wfl-btn-primary wfl-ripple wfl-add-feature-btn" style="display: none;">
-            <?php echo $icons['plus']; ?>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
             <?php echo esc_html($translations['suggestFeature']); ?>
         </button>
     </div>

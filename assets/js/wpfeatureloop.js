@@ -5,6 +5,7 @@
      * WPFeatureLoop Widget Controller
      *
      * Uses <template> tags for HTML - no inline strings!
+     * Uses WordPress REST API for communication.
      */
     class WPFeatureLoopWidget {
         constructor(config) {
@@ -19,6 +20,9 @@
 
             // Template cache
             this.templates = {};
+
+            // REST API base URL
+            this.apiBase = config.rest_url || "/wp-json/wpfeatureloop/v1";
         }
 
         /**
@@ -63,10 +67,10 @@
          */
         async loadFeatures() {
             try {
-                const response = await this.ajax("get_features");
+                const response = await this.api("GET", "/features");
 
-                if (response.success) {
-                    this.features = response.data.features || [];
+                if (response.features) {
+                    this.features = response.features;
                     this.render();
                 } else {
                     this.renderError();
@@ -78,24 +82,32 @@
         }
 
         /**
-         * Make AJAX request
+         * Make REST API request
          */
-        async ajax(action, data = {}) {
-            const formData = new FormData();
-            formData.append("action", "wpfeatureloop_" + action);
-            formData.append("nonce", this.config.nonce);
+        async api(method, endpoint, data = null) {
+            const url = this.apiBase + endpoint;
 
-            Object.keys(data).forEach((key) => {
-                formData.append(key, data[key]);
-            });
-
-            const response = await fetch(this.config.ajax_url, {
-                method: "POST",
-                body: formData,
+            const options = {
+                method,
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-WP-Nonce": this.config.nonce,
+                },
                 credentials: "same-origin",
-            });
+            };
 
-            return response.json();
+            if (data && (method === "POST" || method === "PUT" || method === "PATCH")) {
+                options.body = JSON.stringify(data);
+            }
+
+            const response = await fetch(url, options);
+            const json = await response.json();
+
+            if (!response.ok) {
+                throw new Error(json.error || "Request failed");
+            }
+
+            return json;
         }
 
         /**
@@ -415,36 +427,28 @@
             if (submitBtn) submitBtn.disabled = true;
 
             try {
-                const response = await this.ajax("create_feature", { title, description });
+                const newFeature = await this.api("POST", "/features", { title, description });
 
-                if (response.success) {
-                    const newFeature = response.data;
-                    this.features.unshift(newFeature);
+                this.features.unshift(newFeature);
 
-                    const list = this.container.querySelector("#wfl-list");
-                    const emptyEl = list?.querySelector(".wfl-empty");
-                    if (emptyEl) emptyEl.remove();
+                const list = this.container.querySelector("#wfl-list");
+                const emptyEl = list?.querySelector(".wfl-empty");
+                if (emptyEl) emptyEl.remove();
 
-                    const newCard = this.createCard(newFeature);
-                    if (newCard && list) {
-                        list.insertBefore(newCard, list.firstChild);
-                        this.attachCardListeners(newFeature.id);
-                    }
-
-                    this.closeModal();
-                    this.showToast(
-                        this.t.featureSubmitted || "Feature submitted successfully!",
-                        "success"
-                    );
-                } else {
-                    this.showToast(
-                        response.data?.message || this.t.errorText || "Please try again later.",
-                        "error"
-                    );
+                const newCard = this.createCard(newFeature);
+                if (newCard && list) {
+                    list.insertBefore(newCard, list.firstChild);
+                    this.attachCardListeners(newFeature.id);
                 }
+
+                this.closeModal();
+                this.showToast(
+                    this.t.featureSubmitted || "Feature submitted successfully!",
+                    "success"
+                );
             } catch (error) {
                 console.error("WPFeatureLoop: Failed to create feature", error);
-                this.showToast(this.t.errorText || "Please try again later.", "error");
+                this.showToast(error.message || this.t.errorText || "Please try again later.", "error");
             } finally {
                 if (submitBtn) submitBtn.disabled = false;
             }
@@ -477,19 +481,13 @@
             if (commentModal) commentModal.classList.add("wfl-active");
 
             try {
-                const response = await this.ajax("get_comments", { feature_id: featureId });
+                const response = await this.api("GET", `/features/${featureId}/comments`);
 
-                if (response.success) {
-                    this.currentComments = response.data.comments || [];
-                    if (commentsList) {
-                        this.renderCommentsList(this.currentComments, commentsList);
-                    }
-                    this.attachCommentListeners(featureId, feature);
-                } else {
-                    if (commentsList) {
-                        commentsList.innerHTML = `<p style="text-align: center; color: var(--wfl-danger);">${this.t.errorText || "Please try again later."}</p>`;
-                    }
+                this.currentComments = response.comments || [];
+                if (commentsList) {
+                    this.renderCommentsList(this.currentComments, commentsList);
                 }
+                this.attachCommentListeners(featureId, feature);
             } catch (error) {
                 console.error("WPFeatureLoop: Failed to load comments", error);
                 if (commentsList) {
@@ -515,41 +513,32 @@
                 if (submitBtn) submitBtn.disabled = true;
 
                 try {
-                    const response = await self.ajax("add_comment", {
-                        feature_id: featureId,
+                    const newComment = await self.api("POST", `/features/${featureId}/comments`, {
                         content: text,
                     });
 
-                    if (response.success) {
-                        const newComment = response.data;
-                        self.currentComments.push(newComment);
-                        if (commentsList) {
-                            self.renderCommentsList(self.currentComments, commentsList);
-                        }
-
-                        // Update comment count on card
-                        feature.commentsCount = self.currentComments.length;
-                        const card = self.container.querySelector(`.wfl-card[data-id="${featureId}"]`);
-                        const commentCount = card?.querySelector(".wfl-comment-count");
-                        if (commentCount) {
-                            const commentText =
-                                feature.commentsCount === 1
-                                    ? self.t.comment || "comment"
-                                    : self.t.comments || "comments";
-                            commentCount.textContent = `${feature.commentsCount} ${commentText}`;
-                        }
-
-                        if (input) input.value = "";
-                        self.showToast(self.t.commentAdded || "Comment added!", "success");
-                    } else {
-                        self.showToast(
-                            response.data?.message || self.t.errorText || "Please try again later.",
-                            "error"
-                        );
+                    self.currentComments.push(newComment);
+                    if (commentsList) {
+                        self.renderCommentsList(self.currentComments, commentsList);
                     }
+
+                    // Update comment count on card
+                    feature.commentsCount = self.currentComments.length;
+                    const card = self.container.querySelector(`.wfl-card[data-id="${featureId}"]`);
+                    const commentCount = card?.querySelector(".wfl-comment-count");
+                    if (commentCount) {
+                        const commentText =
+                            feature.commentsCount === 1
+                                ? self.t.comment || "comment"
+                                : self.t.comments || "comments";
+                        commentCount.textContent = `${feature.commentsCount} ${commentText}`;
+                    }
+
+                    if (input) input.value = "";
+                    self.showToast(self.t.commentAdded || "Comment added!", "success");
                 } catch (error) {
                     console.error("WPFeatureLoop: Failed to add comment", error);
-                    self.showToast(self.t.errorText || "Please try again later.", "error");
+                    self.showToast(error.message || self.t.errorText || "Please try again later.", "error");
                 } finally {
                     if (submitBtn) submitBtn.disabled = false;
                 }
@@ -660,30 +649,25 @@
             }
 
             try {
-                const response = await this.ajax("vote", {
-                    feature_id: id,
+                const response = await this.api("POST", `/features/${id}/vote`, {
                     vote: newVoteType,
                 });
 
-                if (response.success) {
-                    // Sync with server response
-                    feature.votes = response.data.totalVotes;
-                    feature.userVote = response.data.vote;
-                    if (card) this.updateVoteUI(card, feature);
-                } else {
-                    // Revert on error
-                    feature.votes = originalVotes;
-                    feature.userVote = originalUserVote;
-                    if (card) this.updateVoteUI(card, feature);
-                    this.showToast(this.t.errorText || "Please try again later.", "error");
+                // Sync with server response
+                if (response.totalVotes !== undefined) {
+                    feature.votes = response.totalVotes;
                 }
+                if (response.vote !== undefined) {
+                    feature.userVote = response.vote;
+                }
+                if (card) this.updateVoteUI(card, feature);
             } catch (error) {
                 console.error("WPFeatureLoop: Failed to save vote", error);
                 // Revert on error
                 feature.votes = originalVotes;
                 feature.userVote = originalUserVote;
                 if (card) this.updateVoteUI(card, feature);
-                this.showToast(this.t.errorText || "Please try again later.", "error");
+                this.showToast(error.message || this.t.errorText || "Please try again later.", "error");
             } finally {
                 if (upBtn) upBtn.disabled = false;
                 if (downBtn) downBtn.disabled = false;
@@ -765,12 +749,12 @@
     // Expose to global scope
     window.WPFeatureLoopWidget = WPFeatureLoopWidget;
 
-    // Auto-init if config is available
-    if (typeof window.wpfeatureloop_config !== "undefined") {
-        document.addEventListener("DOMContentLoaded", function () {
+    // Auto-init when DOM is ready (config check inside to handle script loading order)
+    document.addEventListener("DOMContentLoaded", function () {
+        if (typeof window.wpfeatureloop_config !== "undefined") {
             const widget = new WPFeatureLoopWidget(window.wpfeatureloop_config);
             widget.init();
             window.wpfeatureloop = widget;
-        });
-    }
+        }
+    });
 })();

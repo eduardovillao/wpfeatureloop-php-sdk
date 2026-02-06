@@ -9,7 +9,6 @@
  * @var string $description_placeholder
  * @var string $cancel_text
  * @var string $submit_text
- * @var string $icon_close
  */
 
 defined('ABSPATH') || exit;
@@ -19,7 +18,7 @@ defined('ABSPATH') || exit;
         <div class="wfl-modal-header">
             <h2 class="wfl-modal-title"><?php echo esc_html($suggest_title); ?></h2>
             <button class="wfl-modal-close" id="wfl-modal-close">
-                <?php echo $icon_close; ?>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
             </button>
         </div>
         <div class="wfl-modal-body">

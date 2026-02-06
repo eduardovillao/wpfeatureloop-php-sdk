@@ -33,20 +33,6 @@ class Widget
     private string $templatesPath;
 
     /**
-     * SVG Icons
-     */
-    private const ICONS = [
-        'plus' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
-        'arrowUp' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>',
-        'arrowDown' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
-        'comment' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
-        'close' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
-        'send' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4 20-7z"/><path d="m22 2-11 11"/></svg>',
-        'empty' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
-        'error' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/></svg>',
-    ];
-
-    /**
      * Default translations
      */
     private const DEFAULT_TRANSLATIONS = [
@@ -149,14 +135,6 @@ class Widget
     }
 
     /**
-     * Get icon SVG
-     */
-    private function icon(string $name): string
-    {
-        return self::ICONS[$name] ?? '';
-    }
-
-    /**
      * Render a template file with variables
      */
     private function renderTemplate(string $template, array $vars = []): string
@@ -176,167 +154,74 @@ class Widget
     }
 
     /**
-     * Render the widget container (skeleton)
+     * Render the complete widget (container + modals + templates + scripts)
      *
      * @return string HTML
      */
     public function render(): string
     {
-        $skeletonHtml = $this->renderTemplate('skeleton');
+        // Enqueue assets only when widget is rendered
+        $this->client->enqueueAssets();
 
-        return $this->renderTemplate('widget', [
+        $html = '';
+
+        // Main container with skeleton
+        $html .= $this->renderTemplate('widget', [
             'container_id' => $this->config['container_id'],
             'title' => $this->t('title'),
             'subtitle' => $this->t('subtitle'),
             'can_interact' => $this->client->canInteract(),
             'suggest_feature_text' => $this->t('suggestFeature'),
-            'icon_plus' => $this->icon('plus'),
-            'skeleton_html' => $skeletonHtml,
+            'skeleton_html' => $this->renderTemplate('skeleton'),
         ]);
-    }
 
-    /**
-     * Render a feature card
-     *
-     * @param array $feature Feature data
-     * @return string HTML
-     */
-    public function renderCard(array $feature): string
-    {
-        $votes = (int) ($feature['votes'] ?? 0);
-        $commentsCount = (int) ($feature['commentsCount'] ?? 0);
-        $userVote = $feature['userVote'] ?? null;
-
-        return $this->renderTemplate('card', [
-            'id' => $feature['id'],
-            'title' => $feature['title'],
-            'description' => $feature['description'] ?? '',
-            'votes' => $votes,
-            'comments_count' => $commentsCount,
-            'status' => $feature['status'] ?? 'open',
-            'user_vote' => $userVote,
-            'vote_class' => $votes > 0 ? 'wfl-vote-positive' : ($votes < 0 ? 'wfl-vote-negative' : ''),
-            'up_voted' => $userVote === 'up',
-            'down_voted' => $userVote === 'down',
-            'comment_text' => $commentsCount === 1 ? $this->t('comment') : $this->t('comments'),
-            'upvote_tooltip' => $this->t('upvote'),
-            'downvote_tooltip' => $this->t('downvote'),
-            'icon_arrow_up' => $this->icon('arrowUp'),
-            'icon_arrow_down' => $this->icon('arrowDown'),
-            'icon_comment' => $this->icon('comment'),
-            'status_html' => $this->renderStatus($feature['status'] ?? 'open'),
-        ]);
-    }
-
-    /**
-     * Render status badge
-     */
-    private function renderStatus(string $status): string
-    {
-        $labels = [
-            'open' => $this->t('statusOpen'),
-            'planned' => $this->t('statusPlanned'),
-            'progress' => $this->t('statusProgress'),
-            'completed' => $this->t('statusCompleted'),
-        ];
-
-        return $this->renderTemplate('status', [
-            'status' => $status,
-            'label' => $labels[$status] ?? $status,
-        ]);
-    }
-
-    /**
-     * Render empty state
-     */
-    public function renderEmpty(): string
-    {
-        return $this->renderTemplate('empty', [
-            'icon_empty' => $this->icon('empty'),
-            'empty_title' => $this->t('emptyTitle'),
-            'empty_text' => $this->t('emptyText'),
-        ]);
-    }
-
-    /**
-     * Render error state
-     */
-    public function renderError(): string
-    {
-        return $this->renderTemplate('error', [
-            'icon_error' => $this->icon('error'),
-            'error_title' => $this->t('errorTitle'),
-            'error_text' => $this->t('errorText'),
-            'retry_text' => $this->t('retry'),
-        ]);
-    }
-
-    /**
-     * Render feature creation modal
-     */
-    public function renderModal(): string
-    {
-        if (!$this->client->canInteract()) {
-            return '';
+        // Feature modal (only if user can interact)
+        if ($this->client->canInteract()) {
+            $html .= $this->renderTemplate('modal-feature', [
+                'suggest_title' => $this->t('suggestTitle'),
+                'title_label' => $this->t('titleLabel'),
+                'title_placeholder' => $this->t('titlePlaceholder'),
+                'description_label' => $this->t('descriptionLabel'),
+                'description_placeholder' => $this->t('descriptionPlaceholder'),
+                'cancel_text' => $this->t('cancel'),
+                'submit_text' => $this->t('submit'),
+            ]);
         }
 
-        return $this->renderTemplate('modal-feature', [
-            'suggest_title' => $this->t('suggestTitle'),
-            'title_label' => $this->t('titleLabel'),
-            'title_placeholder' => $this->t('titlePlaceholder'),
-            'description_label' => $this->t('descriptionLabel'),
-            'description_placeholder' => $this->t('descriptionPlaceholder'),
-            'cancel_text' => $this->t('cancel'),
-            'submit_text' => $this->t('submit'),
-            'icon_close' => $this->icon('close'),
-        ]);
-    }
-
-    /**
-     * Render comments modal
-     */
-    public function renderCommentModal(): string
-    {
-        return $this->renderTemplate('modal-comment', [
+        // Comment modal
+        $html .= $this->renderTemplate('modal-comment', [
             'comments_title' => $this->t('comments'),
             'add_comment_placeholder' => $this->t('addComment'),
-            'icon_close' => $this->icon('close'),
-            'icon_send' => $this->icon('send'),
         ]);
-    }
 
-    /**
-     * Render toast notification container
-     */
-    public function renderToast(): string
-    {
-        return $this->renderTemplate('toast');
-    }
+        // Toast
+        $html .= $this->renderTemplate('toast');
 
-    /**
-     * Render JS templates (<template> tags for JavaScript)
-     */
-    public function renderJsTemplates(): string
-    {
-        return $this->renderTemplate('js-templates', [
-            'icons' => self::ICONS,
+        // JS Templates
+        $html .= $this->renderTemplate('js-templates', [
             'translations' => $this->translations,
         ]);
+
+        // JS Config
+        $config = wp_json_encode($this->getJsConfig());
+        $html .= sprintf('<script>window.wpfeatureloop_config = %s;</script>', $config);
+
+        return $html;
     }
 
     /**
-     * Get all translations for JS
+     * Get JS configuration array
+     *
+     * @return array Configuration for WPFeatureLoopWidget
      */
-    public function getTranslations(): array
+    private function getJsConfig(): array
     {
-        return $this->translations;
-    }
-
-    /**
-     * Get icons for JS
-     */
-    public function getIcons(): array
-    {
-        return self::ICONS;
+        return [
+            'container_id' => $this->config['container_id'],
+            'rest_url' => rest_url(RestApi::NAMESPACE),
+            'nonce' => wp_create_nonce('wp_rest'),
+            'can_interact' => $this->client->canInteract(),
+            'i18n' => $this->translations,
+        ];
     }
 }
