@@ -16,7 +16,7 @@ class Api
     /**
      * API base URL
      */
-    private string $apiUrl = 'https://wpfeatureloop.vercel.app/api/v1';
+    private string $apiUrl = 'https://app.wpfeatureloop.com/api/v1';
 
     /**
      * Public key
