@@ -42,6 +42,7 @@
     margin: 0 auto;
     color: var(--wfl-gray-800);
     line-height: 1.5;
+    width: 100%;
 }
 
 /* Header */

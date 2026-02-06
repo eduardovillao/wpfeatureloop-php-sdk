@@ -55,11 +55,6 @@ class Client
     private ?string $assetsUrl;
 
     /**
-     * Whether assets have been registered
-     */
-    private static bool $assetsRegistered = false;
-
-    /**
      * Constructor
      *
      * @param string $publicKey Public API key (starts with pk_live_)
@@ -84,61 +79,67 @@ class Client
 
         // Auto-register REST API routes
         add_action('rest_api_init', [$this->restApi, 'registerRoutes']);
-
-        // Register assets (not enqueue) - only once
-        if ($this->assetsUrl && !self::$assetsRegistered) {
-            add_action('admin_enqueue_scripts', [$this, 'registerAssets']);
-            self::$assetsRegistered = true;
-        }
     }
 
     /**
-     * Auto-detect assets URL based on SDK location
+     * Auto-detect assets URL based on plugin location
      */
-    private function detectAssetsUrl(): string
+    private function detectAssetsUrl(): ?string
     {
-        // SDK root is parent of src/ directory
-        $sdkRoot = dirname(__DIR__);
+        // Find the plugin that instantiated this Client using backtrace
+        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 10);
+        $wpPluginDir = defined('WP_PLUGIN_DIR') ? WP_PLUGIN_DIR : WP_CONTENT_DIR . '/plugins';
 
-        // Use composer.json as reference file for plugin_dir_url()
-        $referenceFile = $sdkRoot . '/composer.json';
+        foreach ($trace as $frame) {
+            if (!isset($frame['file'])) {
+                continue;
+            }
 
-        // Get URL to SDK root, then append assets/
-        return plugin_dir_url($referenceFile) . 'assets';
+            $file = $frame['file'];
+
+            // Check if this file is in the plugins directory
+            if (strpos($file, $wpPluginDir) === 0) {
+                // Extract the plugin slug
+                $relativePath = substr($file, strlen($wpPluginDir) + 1);
+                $parts = explode('/', $relativePath);
+                $pluginSlug = $parts[0];
+
+                // Build URL assuming SDK is in vendor/eduardovillao/wpfeatureloop-sdk/
+                return plugins_url(
+                    'vendor/eduardovillao/wpfeatureloop-sdk/assets',
+                    $wpPluginDir . '/' . $pluginSlug . '/plugin.php'
+                );
+            }
+        }
+
+        // Could not auto-detect
+        return null;
     }
 
     /**
-     * Register CSS and JS assets (does not load them yet)
+     * Enqueue CSS and JS assets (registers if not already registered)
      */
-    public function registerAssets(): void
+    public function enqueueAssets(): void
     {
         if (!$this->assetsUrl) {
             return;
         }
 
-        wp_register_style(
+        // wp_enqueue_* will register automatically if not registered
+        wp_enqueue_style(
             self::HANDLE,
             $this->assetsUrl . '/css/wpfeatureloop.css',
             [],
             self::VERSION
         );
 
-        wp_register_script(
+        wp_enqueue_script(
             self::HANDLE,
             $this->assetsUrl . '/js/wpfeatureloop.js',
             [],
             self::VERSION,
             true
         );
-    }
-
-    /**
-     * Enqueue the registered assets (call this when rendering widget)
-     */
-    public function enqueueAssets(): void
-    {
-        wp_enqueue_style(self::HANDLE);
-        wp_enqueue_script(self::HANDLE);
     }
 
     /**
