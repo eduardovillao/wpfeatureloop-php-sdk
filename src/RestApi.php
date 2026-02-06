@@ -141,9 +141,12 @@ class RestApi
         $result = $this->client->getFeatures($args);
 
         if (is_wp_error($result)) {
+            $errorData = $result->get_error_data();
+            $statusCode = $errorData['status'] ?? 400;
             return new \WP_REST_Response([
                 'error' => $result->get_error_message(),
-            ], 400);
+                'debug' => WP_DEBUG ? $errorData : null,
+            ], $statusCode);
         }
 
         return new \WP_REST_Response([

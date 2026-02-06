@@ -170,9 +170,17 @@ class Api
 
         // Check for HTTP errors
         if ($statusCode >= 400) {
-            $errorMessage = $data['error'] ?? 'Unknown error';
+            $errorMessage = $data['error'] ?? $data['message'] ?? 'Unknown error';
             return new WP_Error('wpfeatureloop_api_error', $errorMessage, [
                 'status' => $statusCode,
+                'body' => $body,
+            ]);
+        }
+
+        // Check for JSON parse error
+        if ($data === null && !empty($body)) {
+            return new WP_Error('wpfeatureloop_parse_error', 'Invalid JSON response', [
+                'body' => $body,
             ]);
         }
 
