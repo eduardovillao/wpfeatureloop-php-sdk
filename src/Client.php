@@ -15,9 +15,7 @@ namespace WPFeatureLoop;
  * use WPFeatureLoop\Widget;
  *
  * // Initialize client (REST API + assets registered automatically)
- * $client = new Client('pk_live_xxx', 'project_id', [
- *     'assets_url' => plugin_dir_url(__FILE__) . 'vendor/eduardovillao/wpfeatureloop-sdk/assets',
- * ]);
+ * $client = new Client('pk_live_xxx', 'project_id');
  *
  * // Render widget (just this, nothing else!)
  * $widget = new Widget($client, ['locale' => 'en']);
@@ -69,13 +67,17 @@ class Client
      * @param array<string, mixed> $options Optional configuration
      *                                      - api_url: Custom API URL
      *                                      - capability: Required WP capability (default: 'read')
-     *                                      - assets_url: URL to SDK assets folder (required for assets)
+     *                                      - assets_url: URL to SDK assets folder (auto-detected if not provided)
      */
     public function __construct(string $publicKey, string $projectId, array $options = [])
     {
         $apiUrl = $options['api_url'] ?? null;
         $this->capability = $options['capability'] ?? 'read';
-        $this->assetsUrl = isset($options['assets_url']) ? rtrim($options['assets_url'], '/') : null;
+
+        // Auto-detect assets URL if not provided
+        $this->assetsUrl = isset($options['assets_url'])
+            ? rtrim($options['assets_url'], '/')
+            : $this->detectAssetsUrl();
 
         $this->api = new Api($publicKey, $projectId, $apiUrl);
         $this->restApi = new RestApi($this);
@@ -88,6 +90,21 @@ class Client
             add_action('admin_enqueue_scripts', [$this, 'registerAssets']);
             self::$assetsRegistered = true;
         }
+    }
+
+    /**
+     * Auto-detect assets URL based on SDK location
+     */
+    private function detectAssetsUrl(): string
+    {
+        // SDK root is parent of src/ directory
+        $sdkRoot = dirname(__DIR__);
+
+        // Use composer.json as reference file for plugin_dir_url()
+        $referenceFile = $sdkRoot . '/composer.json';
+
+        // Get URL to SDK root, then append assets/
+        return plugin_dir_url($referenceFile) . 'assets';
     }
 
     /**
