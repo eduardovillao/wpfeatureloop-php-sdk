@@ -184,16 +184,9 @@ class RestApi
     public function vote(\WP_REST_Request $request): \WP_REST_Response
     {
         $featureId = $request->get_param('id');
-        $voteType = $request->get_param('vote');
+        $voteType = $request->get_param('vote'); // 'up', 'down', or 'none'
 
-        if ($voteType === 'none') {
-            $result = $this->client->unvote($featureId);
-        } elseif ($voteType === 'up') {
-            $result = $this->client->vote($featureId);
-        } else {
-            // down vote - API might handle this differently
-            $result = $this->client->vote($featureId);
-        }
+        $result = $this->client->vote($featureId, $voteType);
 
         if (is_wp_error($result)) {
             return new \WP_REST_Response([

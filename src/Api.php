@@ -86,14 +86,17 @@ class Api
     }
 
     /**
-     * Vote for a feature
+     * Vote on a feature
      *
      * @param string $featureId Feature ID
+     * @param string $vote Vote type: 'up', 'down', or 'none'
      * @return array|WP_Error
      */
-    public function vote(string $featureId)
+    public function vote(string $featureId, string $vote = 'up')
     {
-        return $this->request('POST', '/features/' . $featureId . '/vote');
+        return $this->request('POST', '/features/' . $featureId . '/vote', [
+            'vote' => $vote,
+        ]);
     }
 
     /**
@@ -104,7 +107,7 @@ class Api
      */
     public function unvote(string $featureId)
     {
-        return $this->request('DELETE', '/features/' . $featureId . '/vote');
+        return $this->vote($featureId, 'none');
     }
 
     /**

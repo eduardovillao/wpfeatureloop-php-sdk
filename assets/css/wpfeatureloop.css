@@ -382,13 +382,15 @@
     background: var(--wfl-warning);
 }
 
-.wfl-status-progress {
-    background: #d1fae5;
-    color: #059669;
+.wfl-status-progress,
+.wfl-status-in-progress {
+    background: #dbeafe;
+    color: #2563eb;
 }
 
-.wfl-status-progress .wfl-status-dot {
-    background: var(--wfl-success);
+.wfl-status-progress .wfl-status-dot,
+.wfl-status-in-progress .wfl-status-dot {
+    background: var(--wfl-primary);
     animation: wfl-pulse 2s infinite;
 }
 

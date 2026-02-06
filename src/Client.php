@@ -279,18 +279,19 @@ class Client
     }
 
     /**
-     * Vote for a feature
+     * Vote on a feature
      *
      * @param string $featureId Feature ID
+     * @param string $vote Vote type: 'up', 'down', or 'none'
      * @return array|\WP_Error
      */
-    public function vote(string $featureId)
+    public function vote(string $featureId, string $vote = 'up')
     {
         if (!$this->canInteract()) {
             return new \WP_Error('wpfeatureloop_unauthorized', 'User cannot interact');
         }
 
-        return $this->api->vote($featureId);
+        return $this->api->vote($featureId, $vote);
     }
 
     /**
