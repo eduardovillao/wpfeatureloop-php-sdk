@@ -149,9 +149,13 @@ class RestApi
             ], $statusCode);
         }
 
+        // Backend API returns array directly, wrap it for SDK format
+        $features = is_array($result) && !isset($result['features'])
+            ? $result
+            : ($result['features'] ?? []);
+
         return new \WP_REST_Response([
-            'features' => $result['features'] ?? [],
-            'pagination' => $result['pagination'] ?? null,
+            'features' => $features,
         ]);
     }
 

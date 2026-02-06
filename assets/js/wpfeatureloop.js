@@ -69,8 +69,13 @@
             try {
                 const response = await this.api("GET", "/features");
 
+                // API returns { features: [...] } via RestApi.php
                 if (response.features) {
                     this.features = response.features;
+                    this.render();
+                } else if (Array.isArray(response)) {
+                    // Fallback: direct array response
+                    this.features = response;
                     this.render();
                 } else {
                     this.renderError();
@@ -427,25 +432,36 @@
             if (submitBtn) submitBtn.disabled = true;
 
             try {
-                const newFeature = await this.api("POST", "/features", { title, description });
-
-                this.features.unshift(newFeature);
-
-                const list = this.container.querySelector("#wfl-list");
-                const emptyEl = list?.querySelector(".wfl-empty");
-                if (emptyEl) emptyEl.remove();
-
-                const newCard = this.createCard(newFeature);
-                if (newCard && list) {
-                    list.insertBefore(newCard, list.firstChild);
-                    this.attachCardListeners(newFeature.id);
-                }
+                const response = await this.api("POST", "/features", { title, description });
 
                 this.closeModal();
-                this.showToast(
-                    this.t.featureSubmitted || "Feature submitted successfully!",
-                    "success"
-                );
+
+                // Check if feature is pending moderation
+                if (response.isPending) {
+                    // Show message from API (feature goes to Inbox for review)
+                    this.showToast(
+                        response.message || this.t.featurePending || "Your suggestion has been submitted and will be reviewed.",
+                        "success"
+                    );
+                } else {
+                    // Feature is immediately visible (add to list)
+                    this.features.unshift(response);
+
+                    const list = this.container.querySelector("#wfl-list");
+                    const emptyEl = list?.querySelector(".wfl-empty");
+                    if (emptyEl) emptyEl.remove();
+
+                    const newCard = this.createCard(response);
+                    if (newCard && list) {
+                        list.insertBefore(newCard, list.firstChild);
+                        this.attachCardListeners(response.id);
+                    }
+
+                    this.showToast(
+                        this.t.featureSubmitted || "Feature submitted successfully!",
+                        "success"
+                    );
+                }
             } catch (error) {
                 console.error("WPFeatureLoop: Failed to create feature", error);
                 this.showToast(error.message || this.t.errorText || "Please try again later.", "error");
