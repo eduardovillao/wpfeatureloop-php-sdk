@@ -111,16 +111,27 @@ class Api
     }
 
     /**
+     * Get comments for a feature
+     *
+     * @param string $featureId Feature ID
+     * @return array|WP_Error
+     */
+    public function getComments(string $featureId)
+    {
+        return $this->request('GET', '/features/' . $featureId . '/comments');
+    }
+
+    /**
      * Add comment to a feature
      *
      * @param string $featureId Feature ID
-     * @param string $content Comment content
+     * @param string $text Comment text
      * @return array|WP_Error
      */
-    public function addComment(string $featureId, string $content)
+    public function addComment(string $featureId, string $text)
     {
         return $this->request('POST', '/features/' . $featureId . '/comments', [
-            'content' => $content,
+            'text' => $text,
         ]);
     }
 

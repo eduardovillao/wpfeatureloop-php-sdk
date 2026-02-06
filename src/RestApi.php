@@ -204,8 +204,7 @@ class RestApi
     {
         $featureId = $request->get_param('id');
 
-        // Get feature with comments
-        $result = $this->client->getFeature($featureId);
+        $result = $this->client->getComments($featureId);
 
         if (is_wp_error($result)) {
             return new \WP_REST_Response([
@@ -213,25 +212,11 @@ class RestApi
             ], 400);
         }
 
-        $comments = $result['comments'] ?? [];
-
-        // Format comments for frontend
-        $formatted = array_map(function ($comment) {
-            $author = $comment['user']['displayName'] ?? 'Anonymous';
-            $initials = strtoupper(substr($author, 0, 1));
-
-            return [
-                'id' => $comment['id'],
-                'author' => $author,
-                'initials' => $initials,
-                'text' => $comment['content'] ?? '',
-                'time' => $this->formatTime($comment['createdAt'] ?? ''),
-                'isTeamReply' => $comment['isTeamReply'] ?? false,
-            ];
-        }, $comments);
+        // Backend returns array directly with formatted comments
+        $comments = is_array($result) ? $result : [];
 
         return new \WP_REST_Response([
-            'comments' => $formatted,
+            'comments' => $comments,
         ]);
     }
 
@@ -251,18 +236,8 @@ class RestApi
             ], 400);
         }
 
-        // Format response for frontend
-        $author = $result['user']['displayName'] ?? User::getDisplayName();
-        $initials = strtoupper(substr($author, 0, 1));
-
-        return new \WP_REST_Response([
-            'id' => $result['id'] ?? '',
-            'author' => $author,
-            'initials' => $initials,
-            'text' => $result['content'] ?? $content,
-            'time' => $this->formatTime($result['createdAt'] ?? ''),
-            'isTeamReply' => false,
-        ], 201);
+        // Backend already returns formatted comment
+        return new \WP_REST_Response($result, 201);
     }
 
     /**

@@ -310,19 +310,30 @@ class Client
     }
 
     /**
+     * Get comments for a feature
+     *
+     * @param string $featureId Feature ID
+     * @return array|\WP_Error
+     */
+    public function getComments(string $featureId)
+    {
+        return $this->api->getComments($featureId);
+    }
+
+    /**
      * Add comment to a feature
      *
      * @param string $featureId Feature ID
-     * @param string $content Comment content
+     * @param string $text Comment text
      * @return array|\WP_Error
      */
-    public function addComment(string $featureId, string $content)
+    public function addComment(string $featureId, string $text)
     {
         if (!$this->canInteract()) {
             return new \WP_Error('wpfeatureloop_unauthorized', 'User cannot interact');
         }
 
-        return $this->api->addComment($featureId, $content);
+        return $this->api->addComment($featureId, $text);
     }
 
     /**
