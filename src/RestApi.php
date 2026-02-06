@@ -107,7 +107,7 @@ class RestApi
                     'type' => 'string',
                     'sanitize_callback' => 'sanitize_text_field',
                 ],
-                'content' => [
+                'text' => [
                     'required' => true,
                     'type' => 'string',
                     'sanitize_callback' => 'sanitize_textarea_field',
@@ -170,9 +170,11 @@ class RestApi
         $result = $this->client->createFeature($title, $description);
 
         if (is_wp_error($result)) {
+            $errorData = $result->get_error_data();
+            $statusCode = $errorData['status'] ?? 400;
             return new \WP_REST_Response([
                 'error' => $result->get_error_message(),
-            ], 400);
+            ], $statusCode);
         }
 
         return new \WP_REST_Response($result, 201);
@@ -189,9 +191,11 @@ class RestApi
         $result = $this->client->vote($featureId, $voteType);
 
         if (is_wp_error($result)) {
+            $errorData = $result->get_error_data();
+            $statusCode = $errorData['status'] ?? 400;
             return new \WP_REST_Response([
                 'error' => $result->get_error_message(),
-            ], 400);
+            ], $statusCode);
         }
 
         return new \WP_REST_Response($result);
@@ -207,9 +211,11 @@ class RestApi
         $result = $this->client->getComments($featureId);
 
         if (is_wp_error($result)) {
+            $errorData = $result->get_error_data();
+            $statusCode = $errorData['status'] ?? 400;
             return new \WP_REST_Response([
                 'error' => $result->get_error_message(),
-            ], 400);
+            ], $statusCode);
         }
 
         // Backend returns array directly with formatted comments
@@ -226,49 +232,19 @@ class RestApi
     public function addComment(\WP_REST_Request $request): \WP_REST_Response
     {
         $featureId = $request->get_param('id');
-        $content = $request->get_param('content');
+        $text = $request->get_param('text');
 
-        $result = $this->client->addComment($featureId, $content);
+        $result = $this->client->addComment($featureId, $text);
 
         if (is_wp_error($result)) {
+            $errorData = $result->get_error_data();
+            $statusCode = $errorData['status'] ?? 400;
             return new \WP_REST_Response([
                 'error' => $result->get_error_message(),
-            ], 400);
+            ], $statusCode);
         }
 
         // Backend already returns formatted comment
         return new \WP_REST_Response($result, 201);
-    }
-
-    /**
-     * Format timestamp for display
-     */
-    private function formatTime(string $timestamp): string
-    {
-        if (empty($timestamp)) {
-            return '';
-        }
-
-        $time = strtotime($timestamp);
-        if ($time === false) {
-            return '';
-        }
-
-        $diff = time() - $time;
-
-        if ($diff < 60) {
-            return 'just now';
-        } elseif ($diff < 3600) {
-            $mins = floor($diff / 60);
-            return $mins . 'm ago';
-        } elseif ($diff < 86400) {
-            $hours = floor($diff / 3600);
-            return $hours . 'h ago';
-        } elseif ($diff < 604800) {
-            $days = floor($diff / 86400);
-            return $days . 'd ago';
-        } else {
-            return date('M j', $time);
-        }
     }
 }

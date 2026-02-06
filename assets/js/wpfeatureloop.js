@@ -237,8 +237,10 @@
             const labels = {
                 open: this.t.statusOpen || "Open",
                 planned: this.t.statusPlanned || "Planned",
-                progress: this.t.statusProgress || "In Progress",
+                "in-progress": this.t.statusProgress || "In Progress",
+                progress: this.t.statusProgress || "In Progress", // fallback
                 completed: this.t.statusCompleted || "Completed",
+                inbox: this.t.statusInbox || "Inbox",
             };
             return labels[status] || status;
         }
@@ -530,7 +532,7 @@
 
                 try {
                     const newComment = await self.api("POST", `/features/${featureId}/comments`, {
-                        content: text,
+                        text: text,
                     });
 
                     self.currentComments.push(newComment);
