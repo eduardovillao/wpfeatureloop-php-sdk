@@ -13,14 +13,14 @@ namespace WPFeatureLoop;
 class Widget
 {
     /**
+     * Container ID
+     */
+    private const CONTAINER_ID = 'wpfeatureloop';
+
+    /**
      * Client instance
      */
     private Client $client;
-
-    /**
-     * Widget configuration
-     */
-    private array $config;
 
     /**
      * Translations
@@ -108,26 +108,14 @@ class Widget
      * Constructor
      *
      * @param Client $client Client instance
-     * @param array $config Widget configuration
-     *                      - locale: 'en' or 'pt-BR' (default: 'en')
-     *                      - container_id: HTML container ID (default: 'wpfeatureloop')
-     *                      - templates_path: Custom templates directory (optional)
      */
-    public function __construct(Client $client, array $config = [])
+    public function __construct(Client $client)
     {
         $this->client = $client;
-        $this->config = array_merge([
-            'locale' => 'en',
-            'container_id' => 'wpfeatureloop',
-            'templates_path' => null,
-        ], $config);
 
-        $locale = $this->config['locale'];
-        $this->translations = self::DEFAULT_TRANSLATIONS[$locale] ?? self::DEFAULT_TRANSLATIONS['en'];
-
-        // Default templates path is relative to this file
-        $this->templatesPath = $this->config['templates_path']
-            ?? dirname(__DIR__) . '/templates';
+        $language = $client->getLanguage();
+        $this->translations = self::DEFAULT_TRANSLATIONS[$language] ?? self::DEFAULT_TRANSLATIONS['en'];
+        $this->templatesPath = dirname(__DIR__) . '/templates';
     }
 
     /**
@@ -171,7 +159,7 @@ class Widget
 
         // Main container with skeleton
         $html .= $this->renderTemplate('widget', [
-            'container_id' => $this->config['container_id'],
+            'container_id' => self::CONTAINER_ID,
             'title' => $this->t('title'),
             'subtitle' => $this->t('subtitle'),
             'can_interact' => $this->client->canInteract(),
@@ -221,7 +209,7 @@ class Widget
     private function getJsConfig(): array
     {
         return [
-            'container_id' => $this->config['container_id'],
+            'container_id' => self::CONTAINER_ID,
             'rest_url' => rest_url(RestApi::NAMESPACE),
             'nonce' => wp_create_nonce('wp_rest'),
             'can_interact' => $this->client->canInteract(),

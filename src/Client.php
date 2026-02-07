@@ -58,9 +58,14 @@ class Client
     private string $capability;
 
     /**
+     * Language for translations
+     */
+    private string $language;
+
+    /**
      * Assets URL
      */
-    private ?string $assetsUrl;
+    private string $assetsUrl;
 
     /**
      * Initialize the client (singleton pattern)
@@ -94,17 +99,26 @@ class Client
     /**
      * Render the widget (convenience static method)
      *
-     * @param array $config Widget configuration (locale, container_id, etc.)
      * @return string HTML or empty string if not initialized
      */
-    public static function renderWidget(array $config = []): string
+    public static function renderWidget(): string
     {
         if (self::$instance === null) {
             return '<!-- WPFeatureLoop: Client not initialized. Call Client::init() first. -->';
         }
 
-        $widget = new Widget(self::$instance, $config);
+        $widget = new Widget(self::$instance);
         return $widget->render();
+    }
+
+    /**
+     * Get configured language
+     *
+     * @return string
+     */
+    public function getLanguage(): string
+    {
+        return $this->language;
     }
 
     /**
@@ -113,19 +127,17 @@ class Client
      * @param string $publicKey Public API key (starts with pk_live_)
      * @param string $projectId Project ID
      * @param array<string, mixed> $options Optional configuration
-     *                                      - api_url: Custom API URL
+     *                                      - language: 'en' or 'pt-BR' (default: 'en')
      *                                      - capability: Required WP capability (default: 'read')
-     *                                      - assets_url: URL to SDK assets folder (auto-detected if not provided)
      */
     private function __construct(string $publicKey, string $projectId, array $options = [])
     {
         $apiUrl = $options['api_url'] ?? null;
         $this->capability = $options['capability'] ?? 'read';
+        $this->language = $options['language'] ?? 'en';
 
-        // Auto-detect assets URL if not provided
-        $this->assetsUrl = isset($options['assets_url'])
-            ? rtrim($options['assets_url'], '/')
-            : $this->detectAssetsUrl();
+        // Assets URL based on SDK location
+        $this->assetsUrl = plugin_dir_url(dirname(__DIR__) . '/include.php') . 'assets';
 
         $this->api = new Api($publicKey, $projectId, $apiUrl);
         $this->restApi = new RestApi($this);
@@ -150,51 +162,12 @@ class Client
     }
 
     /**
-     * Auto-detect assets URL based on plugin location
-     */
-    private function detectAssetsUrl(): ?string
-    {
-        // Find the plugin that instantiated this Client using backtrace
-        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 10);
-        $wpPluginDir = defined('WP_PLUGIN_DIR') ? WP_PLUGIN_DIR : WP_CONTENT_DIR . '/plugins';
-
-        foreach ($trace as $frame) {
-            if (!isset($frame['file'])) {
-                continue;
-            }
-
-            $file = $frame['file'];
-
-            // Check if this file is in the plugins directory
-            if (strpos($file, $wpPluginDir) === 0) {
-                // Extract the plugin slug
-                $relativePath = substr($file, strlen($wpPluginDir) + 1);
-                $parts = explode('/', $relativePath);
-                $pluginSlug = $parts[0];
-
-                // Build URL assuming SDK is in vendor/eduardovillao/wpfeatureloop-sdk/
-                return plugins_url(
-                    'vendor/eduardovillao/wpfeatureloop-sdk/assets',
-                    $wpPluginDir . '/' . $pluginSlug . '/plugin.php'
-                );
-            }
-        }
-
-        // Could not auto-detect
-        return null;
-    }
-
-    /**
      * Register CSS and JS assets (called via admin_enqueue_scripts hook)
      *
      * This registers assets early so they're available for enqueuing later.
      */
     public function registerAssets(): void
     {
-        if (!$this->assetsUrl) {
-            return;
-        }
-
         wp_register_style(
             self::HANDLE,
             $this->assetsUrl . '/css/wpfeatureloop.css',
