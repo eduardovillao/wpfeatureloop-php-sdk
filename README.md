@@ -21,12 +21,10 @@ This must run on **every WordPress request** so REST API routes are registered:
  */
 
 require_once __DIR__ . '/vendor/autoload.php';
-
-use WPFeatureLoop\Client;
-
-Client::init('pk_live_your_public_key', 'your_project_id', [
+\WPFeatureLoop\ClientClient::init('pk_live_your_public_key', 'your_project_id', [
     'language' => 'en',
 ]);
+
 ```
 
 ### Step 2: Render the widget
@@ -34,9 +32,7 @@ Client::init('pk_live_your_public_key', 'your_project_id', [
 Add the widget wherever you want to display it:
 
 ```php
-use WPFeatureLoop\Client;
-
-echo Client::renderWidget();
+echo \WPFeatureLoop\Client::getInstance('your_project_id')->renderWidget();
 ```
 
 ## Configuration
