@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "scripts": {
+    "build:css": "esbuild assets/css/wpfeatureloop.css --minify --outfile=assets/css/wpfeatureloop.min.css",
+    "build:js": "esbuild assets/js/wpfeatureloop.js --minify --outfile=assets/js/wpfeatureloop.min.js",
+    "build": "npm run build:css && npm run build:js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

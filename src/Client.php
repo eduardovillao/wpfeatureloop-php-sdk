@@ -196,22 +196,15 @@ class Client
     }
 
     /**
-     * Register CSS and JS assets (called via admin_enqueue_scripts hook)
+     * Register JS asset (called via admin_enqueue_scripts hook)
      *
-     * This registers assets early so they're available for enqueuing later.
+     * CSS is inlined by Widget to avoid FOUC.
      */
     public function registerAssets(): void
     {
-        wp_register_style(
-            self::HANDLE,
-            $this->assetsUrl . '/css/wpfeatureloop.css',
-            [],
-            self::VERSION
-        );
-
         wp_register_script(
             self::HANDLE,
-            $this->assetsUrl . '/js/wpfeatureloop.js',
+            $this->assetsUrl . '/js/wpfeatureloop.min.js',
             [],
             self::VERSION,
             true
@@ -219,18 +212,16 @@ class Client
     }
 
     /**
-     * Enqueue CSS and JS assets (called when widget renders)
+     * Enqueue JS asset (called when widget renders)
      *
-     * Assets must be registered first via registerAssets().
+     * CSS is handled inline by Widget::render().
      */
     public function enqueueAssets(): void
     {
-        // If not registered yet (edge case), register now
-        if (!wp_style_is(self::HANDLE, 'registered')) {
+        if (!wp_script_is(self::HANDLE, 'registered')) {
             $this->registerAssets();
         }
 
-        wp_enqueue_style(self::HANDLE);
         wp_enqueue_script(self::HANDLE);
     }
 

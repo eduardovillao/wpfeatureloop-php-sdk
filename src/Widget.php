@@ -39,6 +39,11 @@ class Widget
     private string $templatesPath;
 
     /**
+     * Whether inline styles have already been outputted (shared across instances)
+     */
+    private static bool $stylesOutputted = false;
+
+    /**
      * Default translations
      */
     private const DEFAULT_TRANSLATIONS = [
@@ -133,6 +138,29 @@ class Widget
     }
 
     /**
+     * Get inline styles
+     *
+     * Reads pre-minified CSS file and wraps in <style> tag.
+     * Only outputs once even with multiple widget instances.
+     */
+    private function getInlineStyles(): string
+    {
+        if (self::$stylesOutputted) {
+            return '';
+        }
+
+        self::$stylesOutputted = true;
+
+        $cssFile = dirname(__DIR__) . '/assets/css/wpfeatureloop.min.css';
+
+        if (!file_exists($cssFile)) {
+            return '';
+        }
+
+        return '<style>' . file_get_contents($cssFile) . '</style>';
+    }
+
+    /**
      * Render a template file with variables
      */
     private function renderTemplate(string $template, array $vars = []): string
@@ -161,10 +189,13 @@ class Widget
      */
     public function render(): string
     {
-        // Enqueue assets only when widget is rendered
+        // Enqueue JS only when widget is rendered
         $this->client->enqueueAssets();
 
         $html = '';
+
+        // Inline CSS before container to avoid FOUC
+        $html .= $this->getInlineStyles();
 
         // Open container with config as data attribute (JS reads it for auto-init)
         $html .= sprintf(
