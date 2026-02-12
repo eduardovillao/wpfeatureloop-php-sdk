@@ -34,7 +34,7 @@ class Client
     /**
      * SDK Version (used for cache busting)
      */
-    public const VERSION = '1.0.0';
+    public const VERSION = '1.2.0';
 
     /**
      * Script/style handle (shared across instances — same files)
@@ -114,20 +114,13 @@ class Client
     }
 
     /**
-     * Render the widget (convenience static method)
+     * Render the widget
      *
-     * @param string|null $projectId Project ID (null uses last registered instance)
-     * @return string HTML or empty string if not initialized
+     * @return string HTML
      */
-    public static function renderWidget(?string $projectId = null): string
+    public function renderWidget(): string
     {
-        $instance = self::getInstance($projectId);
-
-        if ($instance === null) {
-            return '<!-- WPFeatureLoop: Client not initialized. Call Client::init() first. -->';
-        }
-
-        $widget = new Widget($instance);
+        $widget = new Widget($this);
         return $widget->render();
     }
 
