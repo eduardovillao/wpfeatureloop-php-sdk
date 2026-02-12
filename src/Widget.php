@@ -4,11 +4,17 @@ declare(strict_types=1);
 
 namespace WPFeatureLoop;
 
+use WPFeatureLoop\Client;
+use WPFeatureLoop\RestApi;
+
 /**
  * Widget Renderer
  *
  * Renders the feature voting widget with the same UI/UX as the JS SDK.
  * Uses template files instead of inline HTML strings.
+ *
+ * Everything (modals, templates, toast) is rendered inside the container div
+ * so the JS can scope all queries to this.container without needing unique IDs.
  */
 class Widget
 {
@@ -146,7 +152,10 @@ class Widget
     }
 
     /**
-     * Render the complete widget (container + modals + templates + scripts)
+     * Render the complete widget
+     *
+     * Everything (header, skeleton, modals, templates, toast) is inside
+     * a single container div so JS can scope all queries.
      *
      * @return string HTML
      */
@@ -157,9 +166,15 @@ class Widget
 
         $html = '';
 
-        // Main container with skeleton
-        $html .= $this->renderTemplate('widget', [
-            'container_id' => self::CONTAINER_ID,
+        // Open container with config as data attribute (JS reads it for auto-init)
+        $html .= sprintf(
+            '<div id="%s" class="wfl-container" data-loading="true" data-config="%s">',
+            esc_attr(self::CONTAINER_ID),
+            esc_attr(wp_json_encode($this->getJsConfig()))
+        );
+
+        // Header + skeleton (visible content)
+        $html .= $this->renderTemplate('widget-inner', [
             'title' => $this->t('title'),
             'subtitle' => $this->t('subtitle'),
             'can_interact' => $this->client->canInteract(),
@@ -194,9 +209,8 @@ class Widget
             'translations' => $this->translations,
         ]);
 
-        // JS Config
-        $config = wp_json_encode($this->getJsConfig());
-        $html .= sprintf('<script>window.wpfeatureloop_config = %s;</script>', $config);
+        // Close container
+        $html .= '</div>';
 
         return $html;
     }
@@ -209,7 +223,7 @@ class Widget
     private function getJsConfig(): array
     {
         return [
-            'container_id' => self::CONTAINER_ID,
+            'project_id' => $this->client->getProjectId(),
             'rest_url' => rest_url(RestApi::NAMESPACE),
             'nonce' => wp_create_nonce('wp_rest'),
             'can_interact' => $this->client->canInteract(),

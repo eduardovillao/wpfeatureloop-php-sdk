@@ -4,16 +4,21 @@ declare(strict_types=1);
 
 namespace WPFeatureLoop;
 
+use WPFeatureLoop\Widget;
+use WPFeatureLoop\RestApi;
+use WPFeatureLoop\Api;
+use WPFeatureLoop\User;
+
 /**
  * FeatureLoop Client
  *
  * Main entry point for the FeatureLoop SDK.
+ * Supports multiple instances (one per project) on the same WordPress site.
  *
- * STEP 1 - In your main plugin file (runs on every request):
+ * STEP 1 - In your main plugin file:
  * ```php
  * use WPFeatureLoop\Client;
  *
- * // Initialize client early (registers REST API routes)
  * Client::init('pk_live_xxx', 'project_id');
  * ```
  *
@@ -21,8 +26,7 @@ namespace WPFeatureLoop;
  * ```php
  * use WPFeatureLoop\Client;
  *
- * // Render widget (that's it!)
- * echo Client::renderWidget(['locale' => 'en']);
+ * echo Client::renderWidget();
  * ```
  */
 class Client
@@ -33,14 +37,21 @@ class Client
     public const VERSION = '1.0.0';
 
     /**
-     * Script/style handle
+     * Script/style handle (shared across instances — same files)
      */
     public const HANDLE = 'wpfeatureloop';
 
     /**
-     * Singleton instance
+     * Registry of instances by projectId
+     *
+     * @var array<string, Client>
      */
-    private static ?Client $instance = null;
+    private static array $instances = [];
+
+    /**
+     * Whether REST API routes have been registered
+     */
+    private static bool $routesRegistered = false;
 
     /**
      * API client instance
@@ -48,9 +59,9 @@ class Client
     private Api $api;
 
     /**
-     * REST API handler
+     * Project ID
      */
-    private RestApi $restApi;
+    private string $projectId;
 
     /**
      * Required capability for interactions
@@ -68,7 +79,7 @@ class Client
     private string $assetsUrl;
 
     /**
-     * Initialize the client (singleton pattern)
+     * Initialize the client (registry pattern — one instance per projectId)
      *
      * Call this in your main plugin file so REST API routes are registered on every request.
      *
@@ -79,36 +90,55 @@ class Client
      */
     public static function init(string $publicKey, string $projectId, array $options = []): Client
     {
-        if (self::$instance === null) {
-            self::$instance = new self($publicKey, $projectId, $options);
+        if (!isset(self::$instances[$projectId])) {
+            self::$instances[$projectId] = new self($publicKey, $projectId, $options);
         }
 
-        return self::$instance;
+        return self::$instances[$projectId];
     }
 
     /**
-     * Get the singleton instance
+     * Get an instance from the registry
      *
+     * @param string|null $projectId Project ID (null returns last registered instance)
      * @return Client|null Returns null if not initialized
      */
-    public static function getInstance(): ?Client
+    public static function getInstance(?string $projectId = null): ?Client
     {
-        return self::$instance;
+        if ($projectId !== null) {
+            return self::$instances[$projectId] ?? null;
+        }
+
+        // Backward compat: return last registered instance
+        return !empty(self::$instances) ? end(self::$instances) : null;
     }
 
     /**
      * Render the widget (convenience static method)
      *
+     * @param string|null $projectId Project ID (null uses last registered instance)
      * @return string HTML or empty string if not initialized
      */
-    public static function renderWidget(): string
+    public static function renderWidget(?string $projectId = null): string
     {
-        if (self::$instance === null) {
+        $instance = self::getInstance($projectId);
+
+        if ($instance === null) {
             return '<!-- WPFeatureLoop: Client not initialized. Call Client::init() first. -->';
         }
 
-        $widget = new Widget(self::$instance);
+        $widget = new Widget($instance);
         return $widget->render();
+    }
+
+    /**
+     * Get project ID
+     *
+     * @return string
+     */
+    public function getProjectId(): string
+    {
+        return $this->projectId;
     }
 
     /**
@@ -135,15 +165,19 @@ class Client
         $apiUrl = $options['api_url'] ?? null;
         $this->capability = $options['capability'] ?? 'read';
         $this->language = $options['language'] ?? 'en';
+        $this->projectId = $projectId;
 
         // Assets URL based on SDK location
         $this->assetsUrl = plugin_dir_url(dirname(__DIR__) . '/include.php') . 'assets';
 
         $this->api = new Api($publicKey, $projectId, $apiUrl);
-        $this->restApi = new RestApi($this);
 
-        // Register REST API routes
-        $this->scheduleOrRun('rest_api_init', [$this->restApi, 'registerRoutes']);
+        // Register REST API routes only once (shared across all instances)
+        if (!self::$routesRegistered) {
+            self::$routesRegistered = true;
+            $restApi = new RestApi();
+            $this->scheduleOrRun('rest_api_init', [$restApi, 'registerRoutes']);
+        }
 
         // Register assets (admin only for now)
         $this->scheduleOrRun('admin_enqueue_scripts', [$this, 'registerAssets']);

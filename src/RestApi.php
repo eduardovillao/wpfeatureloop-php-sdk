@@ -9,6 +9,10 @@ namespace WPFeatureLoop;
  *
  * Registers WordPress REST API endpoints for the widget.
  * Endpoints are under /wp-json/wpfeatureloop/v1/
+ *
+ * Routes are registered once and shared across all Client instances.
+ * Each request includes a project_id query parameter so the handler
+ * can resolve the correct Client instance from the registry.
  */
 class RestApi
 {
@@ -18,16 +22,19 @@ class RestApi
     public const NAMESPACE = 'wpfeatureloop/v1';
 
     /**
-     * Client instance
+     * Common arg definition for project_id (required on all routes)
      */
-    private Client $client;
+    private const PROJECT_ID_ARG = [
+        'project_id' => [
+            'required' => true,
+            'type' => 'string',
+            'sanitize_callback' => 'sanitize_text_field',
+        ],
+    ];
 
-    /**
-     * Constructor
-     */
-    public function __construct(Client $client)
+    private function resolveClient(\WP_REST_Request $request): ?Client
     {
-        $this->client = $client;
+        return Client::getInstance($request->get_param('project_id'));
     }
 
     /**
@@ -40,6 +47,7 @@ class RestApi
             'methods' => 'GET',
             'callback' => [$this, 'getFeatures'],
             'permission_callback' => '__return_true',
+            'args' => self::PROJECT_ID_ARG,
         ]);
 
         // POST /features
@@ -47,7 +55,7 @@ class RestApi
             'methods' => 'POST',
             'callback' => [$this, 'createFeature'],
             'permission_callback' => [$this, 'canInteract'],
-            'args' => [
+            'args' => self::PROJECT_ID_ARG + [
                 'title' => [
                     'required' => true,
                     'type' => 'string',
@@ -67,7 +75,7 @@ class RestApi
             'methods' => 'POST',
             'callback' => [$this, 'vote'],
             'permission_callback' => [$this, 'canInteract'],
-            'args' => [
+            'args' => self::PROJECT_ID_ARG + [
                 'id' => [
                     'required' => true,
                     'type' => 'string',
@@ -87,7 +95,7 @@ class RestApi
             'methods' => 'GET',
             'callback' => [$this, 'getComments'],
             'permission_callback' => '__return_true',
-            'args' => [
+            'args' => self::PROJECT_ID_ARG + [
                 'id' => [
                     'required' => true,
                     'type' => 'string',
@@ -101,7 +109,7 @@ class RestApi
             'methods' => 'POST',
             'callback' => [$this, 'addComment'],
             'permission_callback' => [$this, 'canInteract'],
-            'args' => [
+            'args' => self::PROJECT_ID_ARG + [
                 'id' => [
                     'required' => true,
                     'type' => 'string',
@@ -119,9 +127,15 @@ class RestApi
     /**
      * Permission callback - check if user can interact
      */
-    public function canInteract(): bool
+    public function canInteract(\WP_REST_Request $request): bool
     {
-        return $this->client->canInteract();
+        $client = $this->resolveClient($request);
+
+        if (!$client) {
+            return false;
+        }
+
+        return $client->canInteract();
     }
 
     /**
@@ -129,6 +143,14 @@ class RestApi
      */
     public function getFeatures(\WP_REST_Request $request): \WP_REST_Response
     {
+        $client = $this->resolveClient($request);
+
+        if (!$client) {
+            return new \WP_REST_Response([
+                'error' => 'Unknown project ID',
+            ], 400);
+        }
+
         $args = [
             'status' => $request->get_param('status'),
             'page' => $request->get_param('page'),
@@ -138,7 +160,7 @@ class RestApi
         // Remove null values
         $args = array_filter($args, fn($v) => $v !== null);
 
-        $result = $this->client->getFeatures($args);
+        $result = $client->getFeatures($args);
 
         if (is_wp_error($result)) {
             $errorData = $result->get_error_data();
@@ -164,10 +186,18 @@ class RestApi
      */
     public function createFeature(\WP_REST_Request $request): \WP_REST_Response
     {
+        $client = $this->resolveClient($request);
+
+        if (!$client) {
+            return new \WP_REST_Response([
+                'error' => 'Unknown project ID',
+            ], 400);
+        }
+
         $title = $request->get_param('title');
         $description = $request->get_param('description') ?? '';
 
-        $result = $this->client->createFeature($title, $description);
+        $result = $client->createFeature($title, $description);
 
         if (is_wp_error($result)) {
             $errorData = $result->get_error_data();
@@ -185,10 +215,18 @@ class RestApi
      */
     public function vote(\WP_REST_Request $request): \WP_REST_Response
     {
+        $client = $this->resolveClient($request);
+
+        if (!$client) {
+            return new \WP_REST_Response([
+                'error' => 'Unknown project ID',
+            ], 400);
+        }
+
         $featureId = $request->get_param('id');
         $voteType = $request->get_param('vote'); // 'up', 'down', or 'none'
 
-        $result = $this->client->vote($featureId, $voteType);
+        $result = $client->vote($featureId, $voteType);
 
         if (is_wp_error($result)) {
             $errorData = $result->get_error_data();
@@ -206,9 +244,17 @@ class RestApi
      */
     public function getComments(\WP_REST_Request $request): \WP_REST_Response
     {
+        $client = $this->resolveClient($request);
+
+        if (!$client) {
+            return new \WP_REST_Response([
+                'error' => 'Unknown project ID',
+            ], 400);
+        }
+
         $featureId = $request->get_param('id');
 
-        $result = $this->client->getComments($featureId);
+        $result = $client->getComments($featureId);
 
         if (is_wp_error($result)) {
             $errorData = $result->get_error_data();
@@ -231,10 +277,18 @@ class RestApi
      */
     public function addComment(\WP_REST_Request $request): \WP_REST_Response
     {
+        $client = $this->resolveClient($request);
+
+        if (!$client) {
+            return new \WP_REST_Response([
+                'error' => 'Unknown project ID',
+            ], 400);
+        }
+
         $featureId = $request->get_param('id');
         $text = $request->get_param('text');
 
-        $result = $this->client->addComment($featureId, $text);
+        $result = $client->addComment($featureId, $text);
 
         if (is_wp_error($result)) {
             $errorData = $result->get_error_data();

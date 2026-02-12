@@ -6,11 +6,16 @@
      *
      * Uses <template> tags for HTML - no inline strings!
      * Uses WordPress REST API for communication.
+     *
+     * Supports multiple instances on the same page.
+     * All HTML (modals, templates, toast) lives inside the container div,
+     * so all DOM queries are scoped via this.container.querySelector().
      */
     class WPFeatureLoopWidget {
-        constructor(config) {
+        constructor(container, config) {
             this.config = config;
-            this.container = null;
+            this.projectId = config.project_id || "";
+            this.container = container;
             this.features = [];
             this.currentCommentFeatureId = null;
             this.currentComments = [];
@@ -18,26 +23,39 @@
             // Translations from PHP
             this.t = config.i18n || {};
 
-            // Template cache
+            // Template cache (survives innerHTML clearing)
             this.templates = {};
+
+            // Modal/toast references (saved before innerHTML clearing)
+            this.featureModal = null;
+            this.commentModal = null;
+            this.toast = null;
 
             // REST API base URL
             this.apiBase = config.rest_url || "/wp-json/wpfeatureloop/v1";
         }
 
         /**
-         * Get a template element by ID
+         * Query an element inside the container
+         */
+        q(selector) {
+            return this.container.querySelector(selector);
+        }
+
+        /**
+         * Get a template element by ID (container-scoped)
          */
         getTemplate(id) {
-            if (!this.templates[id]) {
-                const template = document.getElementById(`wfl-template-${id}`);
+            const fullId = `wfl-template-${id}`;
+            if (!this.templates[fullId]) {
+                const template = this.q(`#${fullId}`);
                 if (!template) {
-                    console.error(`WPFeatureLoop: Template not found: wfl-template-${id}`);
+                    console.error(`WPFeatureLoop: Template not found: ${fullId}`);
                     return null;
                 }
-                this.templates[id] = template;
+                this.templates[fullId] = template;
             }
-            return this.templates[id];
+            return this.templates[fullId];
         }
 
         /**
@@ -53,13 +71,36 @@
          * Initialize the widget
          */
         init() {
-            this.container = document.getElementById(this.config.container_id);
-            if (!this.container) {
-                console.error("WPFeatureLoop: Container not found");
-                return;
-            }
+            // Cache templates and modals before first render clears innerHTML
+            this.cacheElements();
 
             this.loadFeatures();
+        }
+
+        /**
+         * Cache template, modal and toast references
+         *
+         * Templates are <template> tags — once cached, cloneNode works
+         * even after they're removed from DOM.
+         * Modals and toast are saved so they can be re-appended after innerHTML clearing.
+         * Modal listeners are attached here (once) since these elements persist.
+         */
+        cacheElements() {
+            // Cache all templates
+            const templateIds = ["card", "status", "empty", "error", "comment", "no-comments", "header", "skeleton"];
+            templateIds.forEach((id) => this.getTemplate(id));
+
+            // Save modals and toast (remove from DOM so innerHTML="" doesn't destroy them)
+            this.featureModal = this.q("#wfl-modal");
+            this.commentModal = this.q("#wfl-comment-modal");
+            this.toast = this.q("#wfl-toast");
+
+            if (this.featureModal) this.featureModal.remove();
+            if (this.commentModal) this.commentModal.remove();
+            if (this.toast) this.toast.remove();
+
+            // Attach modal listeners once (these elements are never recreated)
+            this.attachModalListeners();
         }
 
         /**
@@ -90,7 +131,8 @@
          * Make REST API request
          */
         async api(method, endpoint, data = null) {
-            const url = this.apiBase + endpoint;
+            const sep = endpoint.includes("?") ? "&" : "?";
+            const url = this.apiBase + endpoint + sep + "project_id=" + encodeURIComponent(this.projectId);
 
             const options = {
                 method,
@@ -133,7 +175,6 @@
             // Create list container
             const list = document.createElement("div");
             list.className = "wfl-list";
-            list.id = "wfl-list";
 
             // Add features or empty state
             if (this.features.length > 0) {
@@ -146,20 +187,15 @@
                 if (empty) list.appendChild(empty);
             }
 
-            // Get modal templates from DOM (already rendered by PHP)
-            const featureModal = document.getElementById("wfl-modal");
-            const commentModal = document.getElementById("wfl-comment-modal");
-            const toast = document.getElementById("wfl-toast");
-
             // Clear container and rebuild
             this.container.innerHTML = "";
             this.container.appendChild(header);
             this.container.appendChild(list);
 
-            // Re-append modals and toast if they exist
-            if (featureModal) this.container.appendChild(featureModal);
-            if (commentModal) this.container.appendChild(commentModal);
-            if (toast) this.container.appendChild(toast);
+            // Re-append cached modals and toast
+            if (this.featureModal) this.container.appendChild(this.featureModal);
+            if (this.commentModal) this.container.appendChild(this.commentModal);
+            if (this.toast) this.container.appendChild(this.toast);
 
             this.container.removeAttribute("data-loading");
             this.attachEventListeners();
@@ -268,6 +304,11 @@
                 }
             }
 
+            // Re-append cached modals and toast
+            if (this.featureModal) this.container.appendChild(this.featureModal);
+            if (this.commentModal) this.container.appendChild(this.commentModal);
+            if (this.toast) this.container.appendChild(this.toast);
+
             this.container.removeAttribute("data-loading");
         }
 
@@ -329,39 +370,47 @@
         }
 
         /**
-         * Attach event listeners
+         * Attach modal listeners (called once from cacheElements)
+         *
+         * Modals persist across renders so listeners must only be added once.
          */
-        attachEventListeners() {
-            // Add feature button
-            const addBtn = this.container.querySelector(".wfl-add-feature-btn");
-            if (addBtn) {
-                addBtn.addEventListener("click", () => this.openModal());
-            }
-
-            // Modal events
-            const modal = this.container.querySelector("#wfl-modal");
-            if (modal) {
-                const modalClose = this.container.querySelector("#wfl-modal-close");
-                const modalCancel = this.container.querySelector("#wfl-modal-cancel");
-                const modalSubmit = this.container.querySelector("#wfl-modal-submit");
+        attachModalListeners() {
+            // Feature modal
+            if (this.featureModal) {
+                const modalClose = this.featureModal.querySelector("#wfl-modal-close");
+                const modalCancel = this.featureModal.querySelector("#wfl-modal-cancel");
+                const modalSubmit = this.featureModal.querySelector("#wfl-modal-submit");
 
                 modalClose?.addEventListener("click", () => this.closeModal());
                 modalCancel?.addEventListener("click", () => this.closeModal());
-                modal.addEventListener("click", (e) => {
-                    if (e.target === modal) this.closeModal();
+                this.featureModal.addEventListener("click", (e) => {
+                    if (e.target === this.featureModal) this.closeModal();
                 });
                 modalSubmit?.addEventListener("click", () => this.handleSubmitFeature());
             }
 
-            // Comment modal events
-            const commentModal = this.container.querySelector("#wfl-comment-modal");
-            if (commentModal) {
-                const commentClose = this.container.querySelector("#wfl-comment-modal-close");
+            // Comment modal
+            if (this.commentModal) {
+                const commentClose = this.commentModal.querySelector("#wfl-comment-modal-close");
 
                 commentClose?.addEventListener("click", () => this.closeCommentModal());
-                commentModal.addEventListener("click", (e) => {
-                    if (e.target === commentModal) this.closeCommentModal();
+                this.commentModal.addEventListener("click", (e) => {
+                    if (e.target === this.commentModal) this.closeCommentModal();
                 });
+            }
+        }
+
+        /**
+         * Attach event listeners for rendered content (called each render)
+         *
+         * Only handles elements that are recreated on each render:
+         * the add-feature button (from header template) and feature cards.
+         */
+        attachEventListeners() {
+            // Add feature button (recreated from template each render)
+            const addBtn = this.container.querySelector(".wfl-add-feature-btn");
+            if (addBtn) {
+                addBtn.addEventListener("click", () => this.openModal());
             }
 
             // Card events
@@ -396,9 +445,8 @@
          * Open feature creation modal
          */
         openModal() {
-            const modal = this.container.querySelector("#wfl-modal");
-            if (modal) {
-                modal.classList.add("wfl-active");
+            if (this.featureModal) {
+                this.featureModal.classList.add("wfl-active");
             }
         }
 
@@ -406,11 +454,10 @@
          * Close feature creation modal
          */
         closeModal() {
-            const modal = this.container.querySelector("#wfl-modal");
-            if (modal) {
-                modal.classList.remove("wfl-active");
-                const titleInput = this.container.querySelector("#wfl-feature-title");
-                const descInput = this.container.querySelector("#wfl-feature-desc");
+            if (this.featureModal) {
+                this.featureModal.classList.remove("wfl-active");
+                const titleInput = this.featureModal.querySelector("#wfl-feature-title");
+                const descInput = this.featureModal.querySelector("#wfl-feature-desc");
                 if (titleInput) titleInput.value = "";
                 if (descInput) descInput.value = "";
             }
@@ -420,8 +467,8 @@
          * Handle feature submission
          */
         async handleSubmitFeature() {
-            const titleInput = this.container.querySelector("#wfl-feature-title");
-            const descInput = this.container.querySelector("#wfl-feature-desc");
+            const titleInput = this.featureModal?.querySelector("#wfl-feature-title");
+            const descInput = this.featureModal?.querySelector("#wfl-feature-desc");
             const title = titleInput?.value.trim() || "";
             const description = descInput?.value.trim() || "";
 
@@ -430,7 +477,7 @@
                 return;
             }
 
-            const submitBtn = this.container.querySelector("#wfl-modal-submit");
+            const submitBtn = this.featureModal?.querySelector("#wfl-modal-submit");
             if (submitBtn) submitBtn.disabled = true;
 
             try {
@@ -449,7 +496,7 @@
                     // Feature is immediately visible (add to list)
                     this.features.unshift(response);
 
-                    const list = this.container.querySelector("#wfl-list");
+                    const list = this.container.querySelector(".wfl-list");
                     const emptyEl = list?.querySelector(".wfl-empty");
                     if (emptyEl) emptyEl.remove();
 
@@ -480,10 +527,10 @@
             if (!feature) return;
 
             this.currentCommentFeatureId = featureId;
-            const commentModal = this.container.querySelector("#wfl-comment-modal");
-            const commentsList = this.container.querySelector("#wfl-comments-list");
-            const commentTitle = this.container.querySelector("#wfl-comment-title");
-            const commentInput = this.container.querySelector("#wfl-comment-input");
+            const commentModal = this.commentModal;
+            const commentsList = this.commentModal?.querySelector("#wfl-comments-list");
+            const commentTitle = this.commentModal?.querySelector("#wfl-comment-title");
+            const commentInput = this.commentModal?.querySelector("#wfl-comment-input");
 
             // Clear input and show modal
             if (commentInput) commentInput.value = "";
@@ -519,11 +566,11 @@
          */
         attachCommentListeners(featureId, feature) {
             const self = this;
-            const commentsList = this.container.querySelector("#wfl-comments-list");
+            const commentsList = this.commentModal?.querySelector("#wfl-comments-list");
 
             const handleSubmit = async () => {
-                const input = self.container.querySelector("#wfl-comment-input");
-                const submitBtn = self.container.querySelector("#wfl-comment-submit");
+                const input = self.commentModal?.querySelector("#wfl-comment-input");
+                const submitBtn = self.commentModal?.querySelector("#wfl-comment-submit");
                 const text = input?.value.trim() || "";
 
                 if (!text) return;
@@ -563,8 +610,8 @@
             };
 
             // Replace elements to remove old listeners
-            const oldSubmit = this.container.querySelector("#wfl-comment-submit");
-            const oldInput = this.container.querySelector("#wfl-comment-input");
+            const oldSubmit = this.commentModal?.querySelector("#wfl-comment-submit");
+            const oldInput = this.commentModal?.querySelector("#wfl-comment-input");
 
             if (oldSubmit) {
                 const newSubmit = oldSubmit.cloneNode(true);
@@ -585,11 +632,10 @@
          * Close comments modal
          */
         closeCommentModal() {
-            const commentModal = this.container.querySelector("#wfl-comment-modal");
-            if (commentModal) {
-                commentModal.classList.remove("wfl-active");
+            if (this.commentModal) {
+                this.commentModal.classList.remove("wfl-active");
 
-                const commentInput = this.container.querySelector("#wfl-comment-input");
+                const commentInput = this.commentModal.querySelector("#wfl-comment-input");
                 if (commentInput) commentInput.value = "";
 
                 this.currentCommentFeatureId = null;
@@ -738,20 +784,19 @@
          * Show toast notification
          */
         showToast(message, type = "default") {
-            const toast = this.container.querySelector("#wfl-toast");
-            if (!toast) return;
+            if (!this.toast) return;
 
-            toast.textContent = message;
-            toast.className = "wfl-toast wfl-active";
+            this.toast.textContent = message;
+            this.toast.className = "wfl-toast wfl-active";
 
             if (type === "success") {
-                toast.classList.add("wfl-toast-success");
+                this.toast.classList.add("wfl-toast-success");
             } else if (type === "error") {
-                toast.classList.add("wfl-toast-error");
+                this.toast.classList.add("wfl-toast-error");
             }
 
             setTimeout(() => {
-                toast.classList.remove("wfl-active");
+                this.toast.classList.remove("wfl-active");
             }, 3000);
         }
 
@@ -764,15 +809,15 @@
         }
     }
 
-    // Expose to global scope
-    window.WPFeatureLoopWidget = WPFeatureLoopWidget;
-
-    // Auto-init when DOM is ready (config check inside to handle script loading order)
+    // Auto-init: find all containers and create widget instances
     document.addEventListener("DOMContentLoaded", function () {
-        if (typeof window.wpfeatureloop_config !== "undefined") {
-            const widget = new WPFeatureLoopWidget(window.wpfeatureloop_config);
-            widget.init();
-            window.wpfeatureloop = widget;
-        }
+        document.querySelectorAll(".wfl-container").forEach(function (el) {
+            try {
+                var config = JSON.parse(el.dataset.config || "{}");
+                new WPFeatureLoopWidget(el, config).init();
+            } catch (e) {
+                console.error("WPFeatureLoop: Failed to init widget", e);
+            }
+        });
     });
 })();
