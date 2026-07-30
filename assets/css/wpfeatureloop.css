@@ -1039,3 +1039,11 @@ input.wfl-input {
     color: var(--wfl-gray-500);
     margin-bottom: 16px;
 }
+
+/* Privacy note */
+.wfl-privacy-note {
+    font-size: 11px;
+    color: var(--wfl-gray-400);
+    text-align: center;
+    margin-top: 16px;
+}

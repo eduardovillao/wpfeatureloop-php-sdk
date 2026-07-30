@@ -102,6 +102,25 @@ class User
     }
 
     /**
+     * Filter configured metadata by consent (only if consented)
+     *
+     * Metadata is defined by the integrating plugin and may carry personal
+     * data, so it follows the same rule as the email: nothing leaves the
+     * site until the user opts in.
+     *
+     * @param array<string, mixed> $metadata Metadata configured via Client options
+     * @return array<string, mixed> Metadata or empty array
+     */
+    public static function getMetadata(array $metadata): array
+    {
+        if (!is_user_logged_in() || !self::hasConsent()) {
+            return [];
+        }
+
+        return $metadata;
+    }
+
+    /**
      * Check if user has given consent
      *
      * @return bool

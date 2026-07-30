@@ -79,6 +79,7 @@ class Widget
             'statusCompleted' => 'Completed',
             'upvote' => 'Upvote',
             'downvote' => 'Downvote',
+            'privacyNote' => 'All feedback is anonymous. Your identity is not shared unless you give consent.',
         ],
         'pt-BR' => [
             'title' => 'O que vem por aí?',
@@ -112,6 +113,7 @@ class Widget
             'statusCompleted' => 'Concluído',
             'upvote' => 'Votar a favor',
             'downvote' => 'Votar contra',
+            'privacyNote' => 'Todo feedback é anônimo. Sua identidade não é compartilhada sem seu consentimento.',
         ],
     ];
 
@@ -238,6 +240,11 @@ class Widget
         // JS Templates
         $html .= $this->renderTemplate('js-templates', [
             'translations' => $this->translations,
+        ]);
+
+        // Privacy note
+        $html .= $this->renderTemplate('privacy-note', [
+            'privacy_text' => $this->t('privacyNote'),
         ]);
 
         // Close container

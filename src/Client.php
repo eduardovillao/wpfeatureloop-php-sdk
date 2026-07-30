@@ -152,10 +152,13 @@ class Client
      * @param array<string, mixed> $options Optional configuration
      *                                      - language: 'en' or 'pt-BR' (default: 'en')
      *                                      - capability: Required WP capability (default: 'read')
+     *                                      - metadata: Extra data about the user, sent only for
+     *                                        users who gave consent (default: [])
      */
     private function __construct(string $publicKey, string $projectId, array $options = [])
     {
         $apiUrl = $options['api_url'] ?? null;
+        $metadata = $options['metadata'] ?? [];
         $this->capability = $options['capability'] ?? 'read';
         $this->language = $options['language'] ?? 'en';
         $this->projectId = $projectId;
@@ -163,7 +166,7 @@ class Client
         // Assets URL based on SDK location
         $this->assetsUrl = plugin_dir_url(dirname(__DIR__) . '/include.php') . 'assets';
 
-        $this->api = new Api($publicKey, $projectId, $apiUrl);
+        $this->api = new Api($publicKey, $projectId, $apiUrl, $metadata);
 
         // Register REST API routes only once (shared across all instances)
         if (!self::$routesRegistered) {
