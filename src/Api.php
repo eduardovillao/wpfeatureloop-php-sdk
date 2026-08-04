@@ -67,17 +67,6 @@ class Api
     }
 
     /**
-     * Get single feature
-     *
-     * @param string $featureId Feature ID
-     * @return array|WP_Error
-     */
-    public function getFeature(string $featureId)
-    {
-        return $this->request('GET', '/features/' . $featureId);
-    }
-
-    /**
      * Create a new feature
      *
      * @param string $title Feature title

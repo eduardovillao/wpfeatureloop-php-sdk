@@ -246,17 +246,6 @@ class Client
     }
 
     /**
-     * Get single feature by ID
-     *
-     * @param string $featureId Feature ID
-     * @return array|\WP_Error
-     */
-    public function getFeature(string $featureId)
-    {
-        return $this->api->getFeature($featureId);
-    }
-
-    /**
      * Create a new feature request
      *
      * @param string $title Feature title
