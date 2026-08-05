@@ -132,6 +132,20 @@ class Api
     }
 
     /**
+     * Tell the API about the current user's consent state
+     *
+     * Consent lives in WordPress, so the API only learns about it when a
+     * request happens to carry the header. Syncing right after a decision
+     * applies it immediately instead of waiting for the user's next write.
+     *
+     * @return array|WP_Error
+     */
+    public function syncConsent()
+    {
+        return $this->request('POST', '/consent');
+    }
+
+    /**
      * Make API request
      *
      * @param string $method HTTP method

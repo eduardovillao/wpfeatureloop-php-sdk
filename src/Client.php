@@ -362,12 +362,26 @@ class Client
     /**
      * Set user consent
      *
+     * Stores in WordPress first — the sync sends a header derived from the meta
+     * just written, so the order matters. Sync failure is best-effort and does
+     * not affect the result.
+     *
      * @param bool $consent Whether user consents to sharing data
-     * @return bool Success
+     * @return bool Whether the decision was stored
      */
     public function setUserConsent(bool $consent): bool
     {
-        return User::setConsent($consent);
+        if (!User::setConsent($consent)) {
+            return false;
+        }
+
+        $response = $this->api->syncConsent();
+
+        if (is_wp_error($response) && WP_DEBUG) {
+            error_log('WPFeatureLoop: consent sync failed — ' . $response->get_error_message());
+        }
+
+        return true;
     }
 
     /**
