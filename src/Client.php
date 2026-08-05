@@ -34,7 +34,7 @@ class Client
     /**
      * SDK Version (used for cache busting)
      */
-    public const VERSION = '1.2.0';
+    public const VERSION = '1.3.0';
 
     /**
      * Script/style handle (shared across instances — same files)

@@ -102,6 +102,24 @@ defined('ABSPATH') || exit;
     </div>
 </template>
 
+<template id="wfl-template-consent-undecided">
+    <svg class="wfl-consent-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0M22 8c0-2.3-.8-4.3-2-6M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326M4 2C2.8 3.7 2 5.7 2 8"/></svg>
+    <span class="wfl-consent-bar-text"><?php echo esc_html($translations['consentBarUndecided']); ?></span>
+    <button class="wfl-consent-bar-action" data-consent="grant"><?php echo esc_html($translations['consentEnable']); ?></button>
+</template>
+
+<template id="wfl-template-consent-granted">
+    <svg class="wfl-consent-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+    <span class="wfl-consent-bar-text"><?php echo esc_html($translations['consentBarGranted']); ?></span>
+    <button class="wfl-consent-bar-action" data-consent="deny"><?php echo esc_html($translations['consentBarGrantedAction']); ?></button>
+</template>
+
+<template id="wfl-template-consent-denied">
+    <svg class="wfl-consent-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0M2 2l20 20M18 8a6 6 0 0 0-9.33-5M18 8c0 4.499 1.411 5.956 2.738 7.326A1 1 0 0 1 20 17H7"/></svg>
+    <span class="wfl-consent-bar-text"><?php echo esc_html($translations['consentBarDenied']); ?></span>
+    <button class="wfl-consent-bar-action" data-consent="grant"><?php echo esc_html($translations['consentEnable']); ?></button>
+</template>
+
 <template id="wfl-template-skeleton">
     <div class="wfl-skeleton-card">
         <div class="wfl-skeleton-vote">

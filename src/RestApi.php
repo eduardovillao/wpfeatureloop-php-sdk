@@ -122,6 +122,19 @@ class RestApi
                 ],
             ],
         ]);
+
+        // POST /consent
+        register_rest_route(self::NAMESPACE, '/consent', [
+            'methods' => 'POST',
+            'callback' => [$this, 'setConsent'],
+            'permission_callback' => [$this, 'canInteract'],
+            'args' => self::PROJECT_ID_ARG + [
+                'consent' => [
+                    'required' => true,
+                    'type' => 'boolean',
+                ],
+            ],
+        ]);
     }
 
     /**
@@ -300,5 +313,33 @@ class RestApi
 
         // Backend already returns formatted comment
         return new \WP_REST_Response($result, 201);
+    }
+
+    /**
+     * POST /consent
+     *
+     * Consent lives in WordPress user meta only. The stored status is echoed
+     * back as the canonical value; the widget renders optimistically and
+     * ignores it.
+     */
+    public function setConsent(\WP_REST_Request $request): \WP_REST_Response
+    {
+        $client = $this->resolveClient($request);
+
+        if (!$client) {
+            return new \WP_REST_Response([
+                'error' => 'Unknown project ID',
+            ], 400);
+        }
+
+        if (!$client->setUserConsent((bool) $request->get_param('consent'))) {
+            return new \WP_REST_Response([
+                'error' => 'Could not save consent',
+            ], 400);
+        }
+
+        return new \WP_REST_Response([
+            'consent' => $client->getUserConsentStatus(),
+        ]);
     }
 }

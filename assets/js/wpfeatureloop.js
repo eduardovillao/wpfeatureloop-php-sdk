@@ -29,7 +29,21 @@
             // Modal/toast references (saved before innerHTML clearing)
             this.featureModal = null;
             this.commentModal = null;
+            this.consentModal = null;
+            this.consentBar = null;
             this.toast = null;
+            this.persistent = [];
+
+            // true | false | null (null = never asked)
+            this.consent = config.consent ?? null;
+
+            // The ask returns on the next visit, but not again on this one
+            this.consentAsked = false;
+
+            // Set when a write happens behind the comment modal
+            this.consentDeferred = false;
+
+            this.onConsentKeydown = null;
 
             // REST API base URL
             this.apiBase = config.rest_url || "/wp-json/wpfeatureloop/v1";
@@ -87,20 +101,40 @@
          */
         cacheElements() {
             // Cache all templates
-            const templateIds = ["card", "status", "empty", "error", "comment", "no-comments", "header", "skeleton"];
+            const templateIds = [
+                "card", "status", "empty", "error", "comment", "no-comments", "header", "skeleton",
+                "consent-undecided", "consent-granted", "consent-denied",
+            ];
             templateIds.forEach((id) => this.getTemplate(id));
 
-            // Save modals and toast (remove from DOM so innerHTML="" doesn't destroy them)
             this.featureModal = this.q("#wfl-modal");
             this.commentModal = this.q("#wfl-comment-modal");
+            this.consentModal = this.q("#wfl-consent-modal");
+            this.consentBar = this.q("#wfl-consent-bar");
             this.toast = this.q("#wfl-toast");
 
-            if (this.featureModal) this.featureModal.remove();
-            if (this.commentModal) this.commentModal.remove();
-            if (this.toast) this.toast.remove();
+            // Survive innerHTML="" — order here is the order they reappear in
+            this.persistent = [
+                this.consentBar,
+                this.q(".wfl-privacy-note"),
+                this.featureModal,
+                this.commentModal,
+                this.consentModal,
+                this.toast,
+            ].filter(Boolean);
+
+            this.persistent.forEach((el) => el.remove());
 
             // Attach modal listeners once (these elements are never recreated)
             this.attachModalListeners();
+            this.renderConsentBar();
+        }
+
+        /**
+         * Re-append elements that survive a full re-render
+         */
+        appendPersistentElements() {
+            this.persistent.forEach((el) => this.container.appendChild(el));
         }
 
         /**
@@ -191,11 +225,7 @@
             this.container.innerHTML = "";
             this.container.appendChild(header);
             this.container.appendChild(list);
-
-            // Re-append cached modals and toast
-            if (this.featureModal) this.container.appendChild(this.featureModal);
-            if (this.commentModal) this.container.appendChild(this.commentModal);
-            if (this.toast) this.container.appendChild(this.toast);
+            this.appendPersistentElements();
 
             this.container.removeAttribute("data-loading");
             this.attachEventListeners();
@@ -304,10 +334,7 @@
                 }
             }
 
-            // Re-append cached modals and toast
-            if (this.featureModal) this.container.appendChild(this.featureModal);
-            if (this.commentModal) this.container.appendChild(this.commentModal);
-            if (this.toast) this.container.appendChild(this.toast);
+            this.appendPersistentElements();
 
             this.container.removeAttribute("data-loading");
         }
@@ -397,6 +424,109 @@
                 this.commentModal.addEventListener("click", (e) => {
                     if (e.target === this.commentModal) this.closeCommentModal();
                 });
+            }
+
+            // Consent modal — closing without choosing leaves the decision open
+            if (this.consentModal) {
+                const consentClose = this.consentModal.querySelector("#wfl-consent-close");
+
+                consentClose?.addEventListener("click", () => this.closeConsentModal());
+                this.consentModal.addEventListener("click", (e) => {
+                    if (e.target === this.consentModal) this.closeConsentModal();
+                });
+
+                this.consentModal.querySelectorAll("[data-consent]").forEach((btn) => {
+                    btn.addEventListener("click", () => {
+                        this.setConsent(btn.dataset.consent === "grant");
+                    });
+                });
+
+                // Bound only while the modal is open, so nothing anchors the
+                // instance to document once it closes
+                this.onConsentKeydown = (e) => {
+                    if (e.key === "Escape") this.closeConsentModal();
+                };
+            }
+
+            // Consent bar is re-rendered on every state change, so delegate
+            if (this.consentBar) {
+                this.consentBar.addEventListener("click", (e) => {
+                    const btn = e.target.closest("[data-consent]");
+                    if (btn) this.setConsent(btn.dataset.consent === "grant");
+                });
+            }
+        }
+
+        /**
+         * Render the consent bar for the current state
+         */
+        renderConsentBar() {
+            if (!this.consentBar) return;
+
+            const state =
+                this.consent === true ? "granted" : this.consent === false ? "denied" : "undecided";
+            const template = this.getTemplate(`consent-${state}`);
+            if (!template) return;
+
+            this.consentBar.dataset.state = state;
+            this.consentBar.innerHTML = "";
+            this.consentBar.appendChild(template.content.cloneNode(true));
+        }
+
+        /**
+         * Ask for consent after a write action, when the user has never decided
+         *
+         * Asked at most once per page load: the question returns on the next
+         * visit, but repeating it within a session would pressure the answer.
+         */
+        maybeAskConsent() {
+            if (this.consent !== null || this.consentAsked || !this.consentModal) return;
+
+            // Would stack two overlays — wait for the comment modal to close
+            if (this.commentModal?.classList.contains("wfl-active")) {
+                this.consentDeferred = true;
+                return;
+            }
+
+            this.consentAsked = true;
+            setTimeout(() => {
+                this.consentModal.classList.add("wfl-active");
+                document.addEventListener("keydown", this.onConsentKeydown);
+            }, 450);
+        }
+
+        /**
+         * Close the consent modal without recording a decision
+         */
+        closeConsentModal() {
+            this.consentModal?.classList.remove("wfl-active");
+            document.removeEventListener("keydown", this.onConsentKeydown);
+        }
+
+        /**
+         * Save a consent decision
+         */
+        async setConsent(consent) {
+            const previous = this.consent;
+
+            this.consent = consent;
+            this.closeConsentModal();
+            this.renderConsentBar();
+
+            try {
+                await this.api("POST", "/consent", { consent });
+
+                this.showToast(
+                    consent
+                        ? this.t.consentGrantedToast || "Done! We'll email you."
+                        : this.t.consentDeclinedToast || "Got it, we won't email you.",
+                    consent ? "success" : "default"
+                );
+            } catch (error) {
+                console.error("WPFeatureLoop: Failed to save consent", error);
+                this.consent = previous;
+                this.renderConsentBar();
+                this.showToast(error.message || this.t.errorText || "Please try again later.", "error");
             }
         }
 
@@ -511,6 +641,8 @@
                         "success"
                     );
                 }
+
+                this.maybeAskConsent();
             } catch (error) {
                 console.error("WPFeatureLoop: Failed to create feature", error);
                 this.showToast(error.message || this.t.errorText || "Please try again later.", "error");
@@ -601,6 +733,7 @@
 
                     if (input) input.value = "";
                     self.showToast(self.t.commentAdded || "Comment added!", "success");
+                    self.maybeAskConsent();
                 } catch (error) {
                     console.error("WPFeatureLoop: Failed to add comment", error);
                     self.showToast(error.message || self.t.errorText || "Please try again later.", "error");
@@ -640,6 +773,11 @@
 
                 this.currentCommentFeatureId = null;
                 this.currentComments = [];
+            }
+
+            if (this.consentDeferred) {
+                this.consentDeferred = false;
+                this.maybeAskConsent();
             }
         }
 
@@ -725,6 +863,8 @@
                     feature.userVote = response.vote;
                 }
                 if (card) this.updateVoteUI(card, feature);
+
+                this.maybeAskConsent();
             } catch (error) {
                 console.error("WPFeatureLoop: Failed to save vote", error);
                 // Revert on error
